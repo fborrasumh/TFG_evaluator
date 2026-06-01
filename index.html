@@ -1,0 +1,1948 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TFG Evaluator · UMH</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0f14;
+    --bg2: #161820;
+    --bg3: #1e2028;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --accent: #c8f55a;
+    --accent2: #a8d43a;
+    --accent-dim: rgba(200,245,90,0.12);
+    --text: #f0f0e8;
+    --text2: #9fa0a8;
+    --text3: #666878;
+    --red: #ff6b6b;
+    --amber: #ffc44d;
+    --blue: #6cb6ff;
+    --purple: #b69dff;
+    --teal: #5de4b4;
+    --radius: 12px;
+    --radius-sm: 6px;
+    --mono: 'DM Mono', monospace;
+    --display: 'DM Serif Display', serif;
+    --sans: 'Syne', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* LAYOUT */
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    padding: 20px 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: rgba(14,15,20,0.95);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 14px;
+    color: #0e0f14;
+    letter-spacing: -1px;
+  }
+  .logo-text {
+    font-family: var(--display);
+    font-size: 20px;
+    color: var(--text);
+  }
+  .logo-text span { color: var(--accent); }
+
+  .header-status {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text2);
+  }
+  .badge.ok { border-color: rgba(200,245,90,0.3); color: var(--accent); background: var(--accent-dim); }
+  .badge.err { border-color: rgba(255,107,107,0.3); color: var(--red); background: rgba(255,107,107,0.08); }
+
+  /* STEPS NAV */
+  .steps-nav {
+    padding: 0 40px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+  }
+  .step-tab {
+    padding: 14px 24px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 8px;
+    white-space: nowrap;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-family: var(--sans);
+  }
+  .step-tab:hover { color: var(--text2); }
+  .step-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .step-tab.done { color: var(--teal); }
+  .step-num {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .step-tab.active .step-num { background: var(--accent); color: #0e0f14; border-color: var(--accent); }
+  .step-tab.done .step-num { background: var(--teal); color: #0e0f14; border-color: var(--teal); }
+
+  /* MAIN */
+  main {
+    flex: 1;
+    padding: 40px;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* SECTION TITLES */
+  .section-title {
+    font-family: var(--display);
+    font-size: 28px;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .section-subtitle {
+    color: var(--text2);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .card + .card { margin-top: 16px; }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text2);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-title .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* BUTTONS */
+  .btn {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.18s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent);
+    color: #0e0f14;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: var(--accent2); border-color: var(--accent2); color: #0e0f14; }
+  .btn.danger { border-color: rgba(255,107,107,0.4); color: var(--red); }
+  .btn.danger:hover { background: rgba(255,107,107,0.1); }
+  .btn.sm { font-size: 12px; padding: 6px 12px; }
+
+  /* INPUTS */
+  input[type="text"], input[type="password"], input[type="number"], textarea, select {
+    font-family: var(--sans);
+    font-size: 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    padding: 10px 14px;
+    transition: border-color 0.2s;
+    outline: none;
+    width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  input::placeholder, textarea::placeholder { color: var(--text3); }
+  select option { background: var(--bg3); }
+  label { font-size: 13px; color: var(--text2); display: block; margin-bottom: 6px; }
+  .form-group { margin-bottom: 20px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* UPLOAD ZONES */
+  .upload-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg3);
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--accent-dim); }
+  .upload-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
+  .upload-label { font-size: 14px; color: var(--text2); }
+  .upload-label strong { color: var(--text); }
+  .upload-hint { font-size: 12px; color: var(--text3); margin-top: 6px; }
+
+  /* FILE LIST */
+  .file-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .file-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .file-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .file-icon { font-size: 18px; opacity: 0.6; flex-shrink: 0; }
+  .file-name { font-size: 13px; font-weight: 500; truncate: ellipsis; white-space: nowrap; overflow: hidden; }
+  .file-meta { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+  .file-status { font-size: 11px; font-family: var(--mono); padding: 3px 8px; border-radius: 3px; flex-shrink: 0; }
+  .file-status.pending { background: var(--bg); color: var(--text3); }
+  .file-status.extracting { background: rgba(107,182,255,0.12); color: var(--blue); }
+  .file-status.ready { background: rgba(93,228,180,0.12); color: var(--teal); }
+  .file-status.evaluating { background: rgba(200,245,90,0.12); color: var(--accent); }
+  .file-status.done { background: rgba(93,228,180,0.12); color: var(--teal); }
+  .file-status.error { background: rgba(255,107,107,0.12); color: var(--red); }
+
+  /* RUBRIC BUILDER */
+  .rubric-mode-tabs {
+    display: flex; gap: 8px; margin-bottom: 24px;
+  }
+  .mode-tab {
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    background: var(--bg3);
+    transition: all 0.18s;
+    font-family: var(--sans);
+  }
+  .mode-tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+  .criterion-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .criterion-header {
+    padding: 14px 18px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg3);
+    cursor: pointer;
+    user-select: none;
+  }
+  .criterion-header:hover { background: rgba(255,255,255,0.03); }
+  .criterion-num {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(200,245,90,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .criterion-name-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .criterion-name-input:focus { border: none; outline: none; }
+  .weight-input {
+    width: 64px;
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .weight-label { font-size: 11px; color: var(--text3); }
+  .criterion-body { padding: 16px 18px; }
+
+  .subcriteria-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .subcriterion-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .subcriterion-row input[type="text"] { flex: 1; }
+  .sc-weight { width: 64px; font-family: var(--mono); font-size: 12px; }
+  .sc-scale { width: 100px; }
+
+  /* SCALE CONFIG */
+  .scale-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  /* PROGRESS / LOG */
+  .progress-wrap {
+    margin: 16px 0;
+  }
+  .progress-bar-track {
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+  .progress-label {
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 6px;
+    display: flex; justify-content: space-between;
+  }
+
+  .log-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    max-height: 260px;
+    overflow-y: auto;
+    line-height: 1.8;
+  }
+  .log-box .log-line { display: block; }
+  .log-box .log-line.info { color: var(--blue); }
+  .log-box .log-line.ok { color: var(--teal); }
+  .log-box .log-line.warn { color: var(--amber); }
+  .log-box .log-line.agent { color: var(--purple); }
+  .log-box .log-line.synth { color: var(--accent); }
+  .log-box .log-line.err { color: var(--red); }
+
+  /* AGENT CARDS */
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .agent-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+    transition: border-color 0.3s;
+  }
+  .agent-card.active { border-color: var(--purple); }
+  .agent-card.done { border-color: var(--teal); }
+  .agent-avatar {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    margin: 0 auto 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    border: 1.5px solid var(--border);
+  }
+  .a1 .agent-avatar { background: rgba(181,212,244,0.1); border-color: rgba(181,212,244,0.3); color: var(--blue); }
+  .a2 .agent-avatar { background: rgba(182,157,255,0.1); border-color: rgba(182,157,255,0.3); color: var(--purple); }
+  .a3 .agent-avatar { background: rgba(255,196,77,0.1); border-color: rgba(255,196,77,0.3); color: var(--amber); }
+  .a4 .agent-avatar { background: rgba(200,245,90,0.1); border-color: rgba(200,245,90,0.3); color: var(--accent); }
+  .agent-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .agent-role { font-size: 11px; color: var(--text3); line-height: 1.4; }
+  .agent-status { font-size: 10px; font-family: var(--mono); margin-top: 8px; color: var(--text3); }
+  .agent-card.active .agent-status { color: var(--purple); }
+  .agent-card.done .agent-status { color: var(--teal); }
+
+  /* RESULTS */
+  .tfg-result-block {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .tfg-result-header {
+    padding: 16px 20px;
+    background: var(--bg3);
+    display: flex; align-items: center; gap: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tfg-result-header:hover { background: rgba(255,255,255,0.03); }
+  .final-score {
+    font-family: var(--display);
+    font-size: 32px;
+    color: var(--accent);
+    line-height: 1;
+    min-width: 64px;
+  }
+  .tfg-title-block { flex: 1; }
+  .tfg-filename { font-size: 15px; font-weight: 600; }
+  .tfg-meta { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .agreement-badge {
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+  .agree-high { background: rgba(93,228,180,0.12); color: var(--teal); }
+  .agree-med { background: rgba(255,196,77,0.12); color: var(--amber); }
+  .agree-low { background: rgba(255,107,107,0.12); color: var(--red); }
+
+  .tfg-result-body { padding: 20px; display: none; }
+  .tfg-result-body.open { display: block; }
+
+  .criterion-result {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .cr-header {
+    padding: 10px 14px;
+    background: var(--bg3);
+    display: flex; align-items: center; gap: 12px;
+    font-size: 13px;
+  }
+  .cr-name { flex: 1; font-weight: 600; }
+  .cr-weight { font-size: 11px; font-family: var(--mono); color: var(--text3); }
+  .cr-score { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--accent); }
+  .cr-body { padding: 14px; }
+  .sc-result-row {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    font-size: 13px;
+  }
+  .sc-result-row:last-child { border-bottom: none; }
+  .sc-result-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .sc-name { flex: 1; font-weight: 500; }
+  .sc-score-pill {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  .sc-disagreement { font-size: 11px; color: var(--amber); }
+  .sc-evidence {
+    background: var(--bg);
+    border-left: 3px solid var(--border2);
+    padding: 8px 12px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 8px;
+    font-style: italic;
+    line-height: 1.5;
+  }
+  .sc-evidence strong { color: var(--text); font-style: normal; }
+  .feed-section { margin-top: 10px; }
+  .feed-label {
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .feed-up-label { color: var(--blue); }
+  .feed-back-label { color: var(--purple); }
+  .feed-forward-label { color: var(--teal); }
+  .feed-text { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+  .reasoning-toggle {
+    font-size: 11px;
+    color: var(--text3);
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: var(--sans);
+    padding: 2px 0;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: color 0.15s;
+  }
+  .reasoning-toggle:hover { color: var(--text2); }
+  .reasoning-box {
+    margin-top: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--text3);
+    line-height: 1.7;
+    display: none;
+  }
+  .reasoning-box.open { display: block; }
+  .agents-scores {
+    display: flex; gap: 6px; margin-top: 4px;
+  }
+  .agent-score-chip {
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text2);
+  }
+
+  /* ALERTS */
+  .alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .alert.info { background: rgba(107,182,255,0.1); border: 1px solid rgba(107,182,255,0.2); color: var(--blue); }
+  .alert.warn { background: rgba(255,196,77,0.1); border: 1px solid rgba(255,196,77,0.2); color: var(--amber); }
+  .alert.err { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.2); color: var(--red); }
+  .alert.ok { background: rgba(93,228,180,0.1); border: 1px solid rgba(93,228,180,0.2); color: var(--teal); }
+
+  /* SPINNER */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  /* PULSE */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .pulsing { animation: pulse 1.5s ease-in-out infinite; }
+
+  /* FINAL SUMMARY BAR */
+  .summary-bar {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .summary-stat { text-align: center; }
+  .summary-stat .val {
+    font-family: var(--display);
+    font-size: 28px;
+    color: var(--accent);
+    line-height: 1;
+    display: block;
+  }
+  .summary-stat .lbl { font-size: 11px; color: var(--text3); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .summary-divider { width: 1px; height: 48px; background: var(--border); }
+  .summary-desc { flex: 1; font-size: 13px; color: var(--text2); }
+
+  /* CSV TABLE PREVIEW */
+  .csv-preview {
+    overflow-x: auto;
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .csv-preview table { width: max-content; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+  .csv-preview th {
+    background: var(--bg3);
+    padding: 7px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text2);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    white-space: nowrap;
+  }
+  .csv-preview td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .csv-preview tr:last-child td { border-bottom: none; }
+
+  /* WEIGHT TOTAL */
+  .weight-total {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 6px;
+  }
+  .weight-total.warn { color: var(--amber); }
+  .weight-total.ok { color: var(--teal); }
+
+  /* Misc */
+  .flex { display: flex; }
+  .gap8 { gap: 8px; }
+  .gap16 { gap: 16px; }
+  .mt8 { margin-top: 8px; }
+  .mt16 { margin-top: 16px; }
+  .mt24 { margin-top: 24px; }
+  .mb8 { margin-bottom: 8px; }
+  .text-right { text-align: right; }
+  .text-sm { font-size: 12px; }
+  .text-mono { font-family: var(--mono); }
+  .text-muted { color: var(--text2); }
+  .hidden { display: none !important; }
+
+  /* DRAG GHOST */
+  .file-item.drag-over { border-color: var(--accent); background: var(--accent-dim); }
+
+  /* SCROLLBARS */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+  @media (max-width: 768px) {
+    header { padding: 14px 20px; }
+    main { padding: 24px 20px; }
+    .steps-nav { overflow-x: auto; padding: 0 20px; }
+    .form-row { grid-template-columns: 1fr; }
+    .agents-grid { grid-template-columns: repeat(2, 1fr); }
+    .summary-bar { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">TFG</div>
+    <div class="logo-text">Evaluator<span>·AI</span></div>
+  </div>
+  <div class="header-status">
+    <span id="api-badge" class="badge">API no configurada</span>
+    <span id="docs-badge" class="badge hidden">0 trabajos</span>
+    <span id="rubric-badge" class="badge hidden">Rúbrica</span>
+  </div>
+</header>
+
+<nav class="steps-nav">
+  <button class="step-tab active" data-panel="config" onclick="goTo('config')">
+    <span class="step-num">1</span> Configuración
+  </button>
+  <button class="step-tab" data-panel="upload" onclick="goTo('upload')">
+    <span class="step-num">2</span> Trabajos TFG
+  </button>
+  <button class="step-tab" data-panel="rubric" onclick="goTo('rubric')">
+    <span class="step-num">3</span> Rúbrica
+  </button>
+  <button class="step-tab" data-panel="evaluate" onclick="goTo('evaluate')">
+    <span class="step-num">4</span> Evaluación
+  </button>
+  <button class="step-tab" data-panel="results" onclick="goTo('results')">
+    <span class="step-num">5</span> Resultados
+  </button>
+</nav>
+
+<main>
+
+<!-- PANEL 1: CONFIG -->
+<div id="panel-config" class="panel active">
+  <h1 class="section-title">Configuración</h1>
+  <p class="section-subtitle">Introduce tu API key de OpenAI para comenzar la evaluación multi-agente.</p>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span> OpenAI API Key</div>
+    <div class="form-group">
+      <label>API Key (se guarda solo en memoria, no sale de tu navegador)</label>
+      <div class="flex gap8" style="align-items:center;">
+        <input type="password" id="api-key-input" placeholder="sk-..." style="flex:1;">
+        <button class="btn primary" onclick="saveApiKey()">Guardar</button>
+        <button class="btn sm" onclick="toggleApiKeyVisibility()" id="eye-btn">Mostrar</button>
+      </div>
+      <div id="api-key-status" class="mt8" style="font-size:12px; color:var(--text3);"></div>
+    </div>
+    <div class="form-group mb8">
+      <label>Modelo</label>
+      <select id="model-select" style="max-width:280px;">
+        <option value="gpt-4o-mini" selected>gpt-4o-mini (recomendado, rápido)</option>
+        <option value="gpt-4o">gpt-4o (mayor precisión)</option>
+        <option value="gpt-4-turbo">gpt-4-turbo</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card mt16">
+    <div class="card-title"><span class="dot"></span> Parámetros de evaluación</div>
+    <div class="form-row">
+      <div class="form-group mb8">
+        <label>Idioma del feedback</label>
+        <select id="feedback-lang">
+          <option value="español" selected>Español</option>
+          <option value="valenciano">Valenciano</option>
+          <option value="inglés">Inglés</option>
+        </select>
+      </div>
+      <div class="form-group mb8">
+        <label>Temperatura de los agentes</label>
+        <input type="number" id="temperature" value="0.3" min="0" max="1" step="0.1" style="max-width:120px;">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group mb8">
+        <label>Máx. tokens por agente</label>
+        <input type="number" id="max-tokens" value="2000" min="500" max="4000" step="100" style="max-width:120px;">
+      </div>
+      <div class="form-group mb8">
+        <label>Máx. caracteres del TFG (para el prompt)</label>
+        <input type="number" id="max-chars" value="12000" min="2000" max="40000" step="1000" style="max-width:160px;">
+      </div>
+    </div>
+  </div>
+
+  <div class="mt24" style="display:flex; justify-content:flex-end;">
+    <button class="btn primary" onclick="goTo('upload')">Siguiente: Subir trabajos →</button>
+  </div>
+</div>
+
+<!-- PANEL 2: UPLOAD TFGs -->
+<div id="panel-upload" class="panel">
+  <h1 class="section-title">Trabajos TFG</h1>
+  <p class="section-subtitle">Sube uno o varios PDFs. El sistema extrae el texto automáticamente.</p>
+
+  <div class="card">
+    <div
+      class="upload-zone"
+      id="upload-zone-tfg"
+      onclick="document.getElementById('input-tfg').click()"
+      ondragover="handleDrag(event,'upload-zone-tfg')"
+      ondragleave="handleDragLeave(event,'upload-zone-tfg')"
+      ondrop="handleDrop(event,'input-tfg','tfg')">
+      <div class="upload-icon">📄</div>
+      <div class="upload-label"><strong>Haz clic</strong> o arrastra los PDFs aquí</div>
+      <div class="upload-hint">PDF · máximo 50 MB por archivo</div>
+    </div>
+    <input type="file" id="input-tfg" accept=".pdf" multiple style="display:none;" onchange="addFiles(this,'tfg')">
+    <div class="file-list" id="tfg-file-list"></div>
+  </div>
+
+  <div class="mt24" style="display:flex; justify-content:space-between; align-items:center;">
+    <button class="btn" onclick="goTo('config')">← Atrás</button>
+    <button class="btn primary" onclick="goTo('rubric')">Siguiente: Definir rúbrica →</button>
+  </div>
+</div>
+
+<!-- PANEL 3: RUBRIC -->
+<div id="panel-rubric" class="panel">
+  <h1 class="section-title">Rúbrica de evaluación</h1>
+  <p class="section-subtitle">Define los criterios y pesos. Puedes subirla en PDF/Word o crearla manualmente.</p>
+
+  <div class="rubric-mode-tabs">
+    <button class="mode-tab active" id="tab-upload-rubric" onclick="switchRubricMode('upload')">📤 Subir rúbrica</button>
+    <button class="mode-tab" id="tab-manual-rubric" onclick="switchRubricMode('manual')">✏️ Crear manualmente</button>
+  </div>
+
+  <!-- UPLOAD RUBRIC -->
+  <div id="rubric-upload-mode">
+    <div class="card">
+      <div
+        class="upload-zone"
+        id="upload-zone-rubric"
+        onclick="document.getElementById('input-rubric').click()"
+        ondragover="handleDrag(event,'upload-zone-rubric')"
+        ondragleave="handleDragLeave(event,'upload-zone-rubric')"
+        ondrop="handleDrop(event,'input-rubric','rubric')">
+        <div class="upload-icon">📋</div>
+        <div class="upload-label"><strong>Sube la rúbrica</strong> en PDF o texto</div>
+        <div class="upload-hint">PDF · TXT · el sistema extraerá criterios y pesos automáticamente</div>
+      </div>
+      <input type="file" id="input-rubric" accept=".pdf,.txt" style="display:none;" onchange="loadRubricFile(this)">
+      <div id="rubric-file-info" style="margin-top:12px;"></div>
+    </div>
+    <div id="rubric-extract-area" class="hidden">
+      <div class="alert info mt16">
+        <div class="spinner" id="rubric-spinner" style="display:none;"></div>
+        <span id="rubric-extract-msg">La IA analizará la rúbrica y extraerá criterios, subcriterios y pesos.</span>
+      </div>
+      <button class="btn primary mt8" id="btn-extract-rubric" onclick="extractRubricWithAI()">
+        🤖 Extraer criterios con IA
+      </button>
+    </div>
+  </div>
+
+  <!-- MANUAL RUBRIC -->
+  <div id="rubric-manual-mode" class="hidden">
+    <div class="card mb8">
+      <div class="card-title"><span class="dot"></span> Escala de puntuación</div>
+      <div class="scale-row">
+        <div class="form-group mb8">
+          <label>Puntuación mínima</label>
+          <input type="number" id="scale-min" value="0">
+        </div>
+        <div class="form-group mb8">
+          <label>Puntuación máxima</label>
+          <input type="number" id="scale-max" value="10">
+        </div>
+        <div class="form-group mb8">
+          <label>Paso</label>
+          <input type="number" id="scale-step" value="0.5">
+        </div>
+      </div>
+    </div>
+
+    <div id="criteria-container"></div>
+
+    <div class="flex gap8 mt8">
+      <button class="btn" onclick="addCriterion()">+ Añadir criterio</button>
+      <div class="weight-total" id="weight-total-display"></div>
+    </div>
+  </div>
+
+  <!-- RUBRIC PREVIEW -->
+  <div id="rubric-preview-section" class="hidden mt24">
+    <div class="card">
+      <div class="card-title"><span class="dot"></span> Rúbrica cargada — <span id="rubric-preview-count" style="color:var(--accent);"></span></div>
+      <div id="rubric-preview-content"></div>
+    </div>
+  </div>
+
+  <div class="mt24" style="display:flex; justify-content:space-between; align-items:center;">
+    <button class="btn" onclick="goTo('upload')">← Atrás</button>
+    <button class="btn primary" onclick="goTo('evaluate')" id="btn-go-evaluate">Siguiente: Evaluar →</button>
+  </div>
+</div>
+
+<!-- PANEL 4: EVALUATE -->
+<div id="panel-evaluate" class="panel">
+  <h1 class="section-title">Evaluación multi-agente</h1>
+  <p class="section-subtitle">3 agentes evaluadores independientes + 1 agente de síntesis por cada TFG.</p>
+
+  <div class="agents-grid">
+    <div class="agent-card a1" id="agent-card-1">
+      <div class="agent-avatar">A1</div>
+      <div class="agent-name">Evaluador Α</div>
+      <div class="agent-role">Chain-of-Evaluation<br>+ Evidence Anchoring</div>
+      <div class="agent-status" id="agent-status-1">En espera</div>
+    </div>
+    <div class="agent-card a2" id="agent-card-2">
+      <div class="agent-avatar">A2</div>
+      <div class="agent-name">Evaluador Β</div>
+      <div class="agent-role">Self-Critique<br>+ Bias Mitigation</div>
+      <div class="agent-status" id="agent-status-2">En espera</div>
+    </div>
+    <div class="agent-card a3" id="agent-card-3">
+      <div class="agent-avatar">A3</div>
+      <div class="agent-name">Evaluador Γ</div>
+      <div class="agent-role">Few-Shot Calibration<br>+ Rubric Descriptors</div>
+      <div class="agent-status" id="agent-status-3">En espera</div>
+    </div>
+    <div class="agent-card a4" id="agent-card-4">
+      <div class="agent-avatar">S</div>
+      <div class="agent-name">Síntesis</div>
+      <div class="agent-role">Resolución de<br>desacuerdos + Informe</div>
+      <div class="agent-status" id="agent-status-4">En espera</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span> Estado de la evaluación</div>
+    <div id="eval-alert-area"></div>
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span id="progress-text">Listo para evaluar</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar"></div></div>
+    </div>
+    <div class="log-box" id="eval-log"></div>
+  </div>
+
+  <div class="mt24" style="display:flex; justify-content:space-between; align-items:center;">
+    <button class="btn" onclick="goTo('rubric')" id="btn-back-rubric">← Atrás</button>
+    <div class="flex gap8">
+      <button class="btn danger" id="btn-stop" onclick="stopEvaluation()" style="display:none;">⏹ Detener</button>
+      <button class="btn primary" id="btn-start-eval" onclick="startEvaluation()">▶ Iniciar evaluación</button>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL 5: RESULTS -->
+<div id="panel-results" class="panel">
+  <h1 class="section-title">Resultados</h1>
+  <p class="section-subtitle">Evaluaciones completas con evidencias, razonamiento y feedback formativo.</p>
+
+  <div id="results-summary-bar" class="hidden">
+    <div class="summary-bar">
+      <div class="summary-stat"><span class="val" id="sum-total">0</span><span class="lbl">Trabajos</span></div>
+      <div class="summary-divider"></div>
+      <div class="summary-stat"><span class="val" id="sum-avg">—</span><span class="lbl">Media</span></div>
+      <div class="summary-divider"></div>
+      <div class="summary-stat"><span class="val" id="sum-agree">—</span><span class="lbl">Acuerdo medio</span></div>
+      <div class="summary-divider"></div>
+      <div class="summary-desc" id="sum-desc">Los agentes han completado la evaluación.</div>
+    </div>
+    <div class="flex gap8 mb8">
+      <button class="btn primary" onclick="downloadCSV()">⬇ Descargar CSV</button>
+      <button class="btn" onclick="toggleCsvPreview()">👁 Vista previa CSV</button>
+      <button class="btn" onclick="downloadJSON()">⬇ JSON completo</button>
+    </div>
+    <div id="csv-preview-area" class="hidden">
+      <div class="csv-preview" id="csv-table-wrap"></div>
+    </div>
+  </div>
+
+  <div id="results-container"></div>
+
+  <div id="results-empty" class="card" style="text-align:center; padding:60px 24px;">
+    <div style="font-size:48px; opacity:0.2; margin-bottom:16px;">📊</div>
+    <div style="color:var(--text2); font-size:14px;">Todavía no hay resultados.<br>Completa la evaluación primero.</div>
+    <button class="btn mt16" onclick="goTo('evaluate')">Ir a Evaluación →</button>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+const state = {
+  apiKey: '',
+  model: 'gpt-4o-mini',
+  temperature: 0.3,
+  maxTokens: 2000,
+  maxChars: 12000,
+  feedbackLang: 'español',
+  tfgFiles: [],
+  rubricText: '',
+  rubricData: [],  // [{name, weight, scaleMin, scaleMax, subcriteria:[{name,weight}]}]
+  scaleMin: 0,
+  scaleMax: 10,
+  results: [],
+  evaluating: false,
+  stopFlag: false,
+  criterionCount: 0,
+};
+
+// ── NAVIGATION ───────────────────────────────────────────────────────────────
+function goTo(panel) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.step-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + panel).classList.add('active');
+  document.querySelector(`[data-panel="${panel}"]`).classList.add('active');
+  syncHeaderBadges();
+}
+
+function syncHeaderBadges() {
+  const apiBadge = document.getElementById('api-badge');
+  if (state.apiKey) {
+    apiBadge.className = 'badge ok';
+    apiBadge.textContent = 'API ✓';
+  }
+  const docsBadge = document.getElementById('docs-badge');
+  if (state.tfgFiles.length > 0) {
+    docsBadge.classList.remove('hidden');
+    docsBadge.textContent = state.tfgFiles.length + ' trabajo' + (state.tfgFiles.length > 1 ? 's' : '');
+  }
+  const rubricBadge = document.getElementById('rubric-badge');
+  if (state.rubricData.length > 0) {
+    rubricBadge.classList.remove('hidden');
+    rubricBadge.textContent = state.rubricData.length + ' criterios';
+  }
+}
+
+// ── API KEY ──────────────────────────────────────────────────────────────────
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-')) {
+    showAlert('api-key-status', 'La clave no parece válida (debe empezar con sk-).', 'warn');
+    return;
+  }
+  state.apiKey = key;
+  state.model = document.getElementById('model-select').value;
+  state.temperature = parseFloat(document.getElementById('temperature').value);
+  state.maxTokens = parseInt(document.getElementById('max-tokens').value);
+  state.maxChars = parseInt(document.getElementById('max-chars').value);
+  state.feedbackLang = document.getElementById('feedback-lang').value;
+  document.getElementById('api-key-status').innerHTML = '<span style="color:var(--teal)">✓ API Key guardada en memoria</span>';
+  document.getElementById('api-badge').className = 'badge ok';
+  document.getElementById('api-badge').textContent = 'API ✓';
+}
+
+function toggleApiKeyVisibility() {
+  const inp = document.getElementById('api-key-input');
+  const btn = document.getElementById('eye-btn');
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Ocultar'; }
+  else { inp.type = 'password'; btn.textContent = 'Mostrar'; }
+}
+
+function showAlert(containerId, msg, type) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = `<span style="color:var(--${type==='warn'?'amber':type==='err'?'red':'teal'})">${msg}</span>`;
+}
+
+// ── FILE HANDLING ────────────────────────────────────────────────────────────
+function handleDrag(e, zoneId) {
+  e.preventDefault();
+  document.getElementById(zoneId).classList.add('drag');
+}
+function handleDragLeave(e, zoneId) {
+  document.getElementById(zoneId).classList.remove('drag');
+}
+function handleDrop(e, inputId, type) {
+  e.preventDefault();
+  document.getElementById(inputId.replace('input-','upload-zone-')).classList.remove('drag');
+  const files = Array.from(e.dataTransfer.files);
+  if (type === 'tfg') processTfgFiles(files);
+  else if (type === 'rubric') { const inp = document.getElementById(inputId); inp.files = e.dataTransfer.files; loadRubricFile(inp); }
+}
+
+function addFiles(input, type) {
+  if (type === 'tfg') processTfgFiles(Array.from(input.files));
+  input.value = '';
+}
+
+function processTfgFiles(files) {
+  files.forEach(file => {
+    if (!file.name.endsWith('.pdf')) return;
+    const id = 'tfg_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const obj = { id, file, name: file.name, size: file.size, text: '', status: 'pending' };
+    state.tfgFiles.push(obj);
+    renderTfgList();
+    extractPdfText(obj);
+  });
+}
+
+function renderTfgList() {
+  const list = document.getElementById('tfg-file-list');
+  list.innerHTML = state.tfgFiles.map(f => `
+    <div class="file-item" id="file-item-${f.id}">
+      <div class="file-info">
+        <span class="file-icon">📄</span>
+        <div>
+          <div class="file-name">${escHtml(f.name)}</div>
+          <div class="file-meta">${(f.size/1024).toFixed(0)} KB · ${f.text ? (f.text.length/1000).toFixed(0) + 'K chars' : 'extrayendo...'}</div>
+        </div>
+      </div>
+      <span class="file-status ${f.status}" id="fstatus-${f.id}">${statusLabel(f.status)}</span>
+      <button class="btn sm danger" onclick="removeTfg('${f.id}')">✕</button>
+    </div>`).join('');
+  syncHeaderBadges();
+}
+
+function statusLabel(s) {
+  return {pending:'pendiente',extracting:'extrayendo',ready:'listo',evaluating:'evaluando',done:'evaluado',error:'error'}[s] || s;
+}
+
+function removeTfg(id) {
+  state.tfgFiles = state.tfgFiles.filter(f => f.id !== id);
+  renderTfgList();
+}
+
+async function extractPdfText(obj) {
+  obj.status = 'extracting';
+  renderTfgList();
+  try {
+    const arrayBuffer = await obj.file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(s => s.str).join(' ') + '\n';
+    }
+    obj.text = text.trim();
+    obj.status = 'ready';
+  } catch (e) {
+    obj.status = 'error';
+    obj.text = '';
+    console.error('PDF extraction error:', e);
+  }
+  renderTfgList();
+}
+
+// ── RUBRIC ───────────────────────────────────────────────────────────────────
+function switchRubricMode(mode) {
+  if (mode === 'upload') {
+    document.getElementById('rubric-upload-mode').classList.remove('hidden');
+    document.getElementById('rubric-manual-mode').classList.add('hidden');
+    document.getElementById('tab-upload-rubric').classList.add('active');
+    document.getElementById('tab-manual-rubric').classList.remove('active');
+  } else {
+    document.getElementById('rubric-upload-mode').classList.add('hidden');
+    document.getElementById('rubric-manual-mode').classList.remove('hidden');
+    document.getElementById('tab-manual-rubric').classList.add('active');
+    document.getElementById('tab-upload-rubric').classList.remove('active');
+    if (state.criterionCount === 0) addCriterion();
+  }
+}
+
+async function loadRubricFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const infoEl = document.getElementById('rubric-file-info');
+  infoEl.innerHTML = `<div class="file-item"><div class="file-info"><span class="file-icon">📋</span><div><div class="file-name">${escHtml(file.name)}</div><div class="file-meta">${(file.size/1024).toFixed(0)} KB</div></div></div><span class="file-status extracting">extrayendo</span></div>`;
+  try {
+    if (file.name.endsWith('.pdf')) {
+      const ab = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+      let text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const c = await page.getTextContent();
+        text += c.items.map(s => s.str).join(' ') + '\n';
+      }
+      state.rubricText = text.trim();
+    } else {
+      state.rubricText = await file.text();
+    }
+    infoEl.innerHTML = infoEl.innerHTML.replace('extracting">extrayendo','ready">listo');
+    document.getElementById('rubric-extract-area').classList.remove('hidden');
+  } catch(e) {
+    infoEl.innerHTML = infoEl.innerHTML.replace('extracting">extrayendo','error">error');
+  }
+}
+
+async function extractRubricWithAI() {
+  if (!state.apiKey) { alert('Configura primero la API Key en el paso 1.'); return; }
+  if (!state.rubricText) { alert('Primero carga el archivo de la rúbrica.'); return; }
+  const btn = document.getElementById('btn-extract-rubric');
+  const spinner = document.getElementById('rubric-spinner');
+  const msg = document.getElementById('rubric-extract-msg');
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+  msg.textContent = 'Extrayendo criterios y subcriterios con IA...';
+
+  const prompt = `Analiza este texto de rúbrica académica y extrae TODOS los criterios de evaluación con sus subcriterios y pesos.
+
+TEXTO DE LA RÚBRICA:
+"""
+${state.rubricText.slice(0, 8000)}
+"""
+
+Responde SOLO con un JSON válido con esta estructura exacta (sin markdown, sin texto extra):
+{
+  "scaleMin": 0,
+  "scaleMax": 10,
+  "criteria": [
+    {
+      "name": "Nombre del criterio",
+      "weight": 25,
+      "description": "Descripción breve",
+      "subcriteria": [
+        {"name": "Nombre del subcriterio", "weight": 50, "description": "Descripción", "excellent": "Descriptor excelente", "acceptable": "Descriptor aceptable", "insufficient": "Descriptor insuficiente"}
+      ]
+    }
+  ]
+}
+
+REGLAS:
+- weight es el porcentaje (0-100). Los weights de los criterios deben sumar 100. Los subcriteria weights dentro de cada criterio también deben sumar 100.
+- Si no hay subcriterios explícitos, crea 2-3 subcriterios lógicos.
+- Usa los nombres EXACTOS de la rúbrica.
+- Infiere scaleMin y scaleMax del texto (por defecto 0-10).`;
+
+  try {
+    const data = await callOpenAI([{role:'user', content: prompt}], 2000, 0.1);
+    const text = data.choices[0].message.content.trim();
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    applyExtractedRubric(parsed);
+    msg.textContent = `✓ Se extrajeron ${parsed.criteria.length} criterios con éxito.`;
+  } catch(e) {
+    msg.textContent = '⚠ Error al extraer. Revisa la API Key o inténtalo de nuevo.';
+    console.error(e);
+  }
+  btn.disabled = false;
+  spinner.style.display = 'none';
+}
+
+function applyExtractedRubric(parsed) {
+  state.rubricData = parsed.criteria.map(c => ({
+    name: c.name,
+    weight: c.weight,
+    description: c.description || '',
+    scaleMin: parsed.scaleMin ?? 0,
+    scaleMax: parsed.scaleMax ?? 10,
+    subcriteria: (c.subcriteria || []).map(sc => ({
+      name: sc.name,
+      weight: sc.weight,
+      description: sc.description || '',
+      excellent: sc.excellent || '',
+      acceptable: sc.acceptable || '',
+      insufficient: sc.insufficient || '',
+    }))
+  }));
+  state.scaleMin = parsed.scaleMin ?? 0;
+  state.scaleMax = parsed.scaleMax ?? 10;
+  renderRubricPreview();
+  syncHeaderBadges();
+}
+
+function renderRubricPreview() {
+  const section = document.getElementById('rubric-preview-section');
+  const count = document.getElementById('rubric-preview-count');
+  const content = document.getElementById('rubric-preview-content');
+  section.classList.remove('hidden');
+  count.textContent = `${state.rubricData.length} criterios · escala ${state.scaleMin}–${state.scaleMax}`;
+  content.innerHTML = state.rubricData.map((c,i) => `
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <span style="font-size:13px;font-weight:600;">${escHtml(c.name)}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--accent);">${c.weight}%</span>
+      </div>
+      ${c.subcriteria.map(sc => `<div style="padding:4px 0 4px 16px;border-left:2px solid var(--border);font-size:12px;color:var(--text2);display:flex;gap:8px;align-items:center;margin-bottom:2px;"><span>${escHtml(sc.name)}</span><span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${sc.weight}%</span></div>`).join('')}
+    </div>`).join('<div style="height:1px;background:var(--border);margin:8px 0;"></div>');
+}
+
+// MANUAL RUBRIC
+function addCriterion() {
+  state.criterionCount++;
+  const id = 'c' + state.criterionCount;
+  const container = document.getElementById('criteria-container');
+  const div = document.createElement('div');
+  div.className = 'criterion-card';
+  div.id = 'criterion-' + id;
+  div.innerHTML = `
+    <div class="criterion-header" onclick="toggleCriterion('${id}')">
+      <div class="criterion-num">${state.criterionCount}</div>
+      <input class="criterion-name-input" type="text" placeholder="Nombre del criterio..." id="cname-${id}" value="Criterio ${state.criterionCount}" onclick="e=>e.stopPropagation()">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="number" class="weight-input" id="cweight-${id}" value="25" min="0" max="100" onclick="event.stopPropagation()" oninput="updateWeightDisplay()">
+        <span class="weight-label">%</span>
+      </div>
+      <button class="btn sm danger" onclick="event.stopPropagation();removeCriterion('${id}')">✕</button>
+    </div>
+    <div class="criterion-body" id="cbody-${id}">
+      <div class="form-group mb8">
+        <label>Descripción del criterio</label>
+        <textarea id="cdesc-${id}" rows="2" placeholder="Descripción general de este criterio..."></textarea>
+      </div>
+      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px;">Subcriterios</div>
+      <div class="subcriteria-list" id="sc-list-${id}"></div>
+      <button class="btn sm" onclick="addSubcriterion('${id}')">+ Subcriterio</button>
+    </div>`;
+  container.appendChild(div);
+  addSubcriterion(id);
+  addSubcriterion(id);
+  updateWeightDisplay();
+}
+
+let scCount = 0;
+function addSubcriterion(cid) {
+  scCount++;
+  const scid = 'sc' + scCount;
+  const list = document.getElementById('sc-list-' + cid);
+  const row = document.createElement('div');
+  row.className = 'subcriterion-row';
+  row.id = 'scrow-' + scid;
+  row.innerHTML = `
+    <input type="text" placeholder="Nombre del subcriterio..." style="flex:1;" id="scname-${scid}">
+    <input type="number" class="sc-weight" placeholder="Peso%" value="50" min="0" max="100" id="scw-${scid}">
+    <input type="text" placeholder="Descriptor excelente..." style="flex:1;" id="scex-${scid}">
+    <button class="btn sm danger" onclick="removeSc('${scid}')">✕</button>`;
+  list.appendChild(row);
+}
+
+function removeSc(scid) {
+  const el = document.getElementById('scrow-' + scid);
+  if (el) el.remove();
+}
+
+function removeCriterion(id) {
+  const el = document.getElementById('criterion-' + id);
+  if (el) el.remove();
+  updateWeightDisplay();
+}
+
+function toggleCriterion(id) {
+  const body = document.getElementById('cbody-' + id);
+  body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+function updateWeightDisplay() {
+  const inputs = document.querySelectorAll('.weight-input');
+  let total = 0;
+  inputs.forEach(i => total += parseFloat(i.value) || 0);
+  const el = document.getElementById('weight-total-display');
+  el.textContent = `Total: ${total.toFixed(0)}%`;
+  el.className = 'weight-total ' + (Math.abs(total - 100) < 1 ? 'ok' : 'warn');
+}
+
+function collectManualRubric() {
+  const cards = document.querySelectorAll('.criterion-card');
+  state.rubricData = [];
+  state.scaleMin = parseFloat(document.getElementById('scale-min').value) || 0;
+  state.scaleMax = parseFloat(document.getElementById('scale-max').value) || 10;
+  cards.forEach(card => {
+    const id = card.id.replace('criterion-','');
+    const name = document.getElementById('cname-' + id)?.value || 'Criterio';
+    const weight = parseFloat(document.getElementById('cweight-' + id)?.value) || 0;
+    const description = document.getElementById('cdesc-' + id)?.value || '';
+    const scRows = card.querySelectorAll('.subcriterion-row');
+    const subcriteria = [];
+    scRows.forEach(row => {
+      const scid = row.id.replace('scrow-','');
+      const scname = document.getElementById('scname-' + scid)?.value || '';
+      const scw = parseFloat(document.getElementById('scw-' + scid)?.value) || 0;
+      const scex = document.getElementById('scex-' + scid)?.value || '';
+      if (scname) subcriteria.push({ name: scname, weight: scw, excellent: scex, acceptable: '', insufficient: '' });
+    });
+    if (name) state.rubricData.push({ name, weight, description, scaleMin: state.scaleMin, scaleMax: state.scaleMax, subcriteria });
+  });
+  renderRubricPreview();
+  syncHeaderBadges();
+}
+
+// ── OPENAI API ────────────────────────────────────────────────────────────────
+async function callOpenAI(messages, maxTokens, temperature) {
+  if (!state.apiKey) throw new Error('Sin API Key');
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + state.apiKey,
+    },
+    body: JSON.stringify({
+      model: document.getElementById('model-select').value || state.model,
+      messages,
+      max_tokens: maxTokens || state.maxTokens,
+      temperature: temperature ?? state.temperature,
+    })
+  });
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || response.statusText);
+  }
+  return response.json();
+}
+
+// ── EVALUATION ────────────────────────────────────────────────────────────────
+let stopFlag = false;
+
+function stopEvaluation() { stopFlag = true; addLog('⏹ Deteniendo evaluación...','warn'); }
+
+function addLog(text, cls='') {
+  const box = document.getElementById('eval-log');
+  const line = document.createElement('span');
+  line.className = 'log-line ' + cls;
+  line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + text;
+  box.appendChild(line);
+  box.appendChild(document.createElement('br'));
+  box.scrollTop = box.scrollHeight;
+}
+
+function setProgress(pct, text) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  if (text) document.getElementById('progress-text').textContent = text;
+}
+
+function setAgentStatus(n, status) {
+  const card = document.getElementById('agent-card-' + n);
+  const statusEl = document.getElementById('agent-status-' + n);
+  card.className = card.className.replace(/\s*(active|done)/g,'');
+  if (status === 'active') { card.classList.add('active'); statusEl.textContent = '● Trabajando'; }
+  else if (status === 'done') { card.classList.add('done'); statusEl.textContent = '✓ Completado'; }
+  else { statusEl.textContent = 'En espera'; }
+}
+
+async function startEvaluation() {
+  // Sync manual rubric if in manual mode
+  const isManual = !document.getElementById('rubric-manual-mode').classList.contains('hidden');
+  if (isManual) collectManualRubric();
+
+  if (!state.apiKey) { addLog('Error: configura la API Key en el paso 1.','err'); return; }
+  if (state.tfgFiles.length === 0) { addLog('Error: sube al menos un TFG.','err'); return; }
+  if (state.rubricData.length === 0) { addLog('Error: define la rúbrica.','err'); return; }
+  const readyFiles = state.tfgFiles.filter(f => f.status === 'ready' || f.text);
+  if (readyFiles.length === 0) { addLog('Esperando extracción de texto PDF...','warn'); return; }
+
+  stopFlag = false;
+  state.results = [];
+  document.getElementById('btn-start-eval').style.display = 'none';
+  document.getElementById('btn-stop').style.display = 'inline-flex';
+  document.getElementById('btn-back-rubric').disabled = true;
+  [1,2,3,4].forEach(n => setAgentStatus(n,'waiting'));
+  document.getElementById('eval-log').innerHTML = '';
+  setProgress(0, 'Iniciando...');
+
+  const total = readyFiles.length;
+
+  for (let i = 0; i < readyFiles.length; i++) {
+    if (stopFlag) break;
+    const tfg = readyFiles[i];
+    tfg.status = 'evaluating';
+    renderTfgList();
+    addLog(`▶ Evaluando: ${tfg.name}`, 'info');
+    setProgress(Math.round((i / total) * 90), `TFG ${i+1}/${total}: ${tfg.name}`);
+
+    try {
+      const result = await evaluateTfg(tfg);
+      state.results.push(result);
+      tfg.status = 'done';
+      renderTfgList();
+      addLog(`✓ Completado: ${tfg.name} → Nota: ${result.finalScore.toFixed(2)}/${state.scaleMax}`, 'ok');
+    } catch(e) {
+      tfg.status = 'error';
+      renderTfgList();
+      addLog(`✗ Error en ${tfg.name}: ${e.message}`, 'err');
+    }
+  }
+
+  setProgress(100, 'Evaluación completada');
+  [1,2,3,4].forEach(n => setAgentStatus(n,'done'));
+  document.getElementById('btn-start-eval').style.display = 'inline-flex';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('btn-back-rubric').disabled = false;
+  addLog('═══ EVALUACIÓN FINALIZADA ═══', 'synth');
+
+  renderResults();
+  goTo('results');
+}
+
+async function evaluateTfg(tfg) {
+  const tfgText = tfg.text.slice(0, state.maxChars);
+  const rubricStr = JSON.stringify(state.rubricData, null, 2);
+  const lang = state.feedbackLang;
+  const scaleMin = state.scaleMin;
+  const scaleMax = state.scaleMax;
+
+  // ── AGENT 1: Chain-of-Evaluation + Evidence Anchoring ─────────────────────
+  setAgentStatus(1, 'active');
+  addLog('  [A1] Evaluador Α: Chain-of-Evaluation + evidencias...', 'agent');
+
+  const agent1Prompt = buildAgentPrompt(1, tfgText, rubricStr, lang, scaleMin, scaleMax);
+  const a1Data = await callOpenAI([{role:'system', content: getSystemPrompt(1, lang)}, {role:'user', content: agent1Prompt}], state.maxTokens, state.temperature);
+  const a1Raw = a1Data.choices[0].message.content;
+  const a1 = safeParseEvalJSON(a1Raw);
+  setAgentStatus(1, 'done');
+  addLog('  [A1] ✓ Evaluación completada', 'agent');
+
+  if (stopFlag) throw new Error('Detenido');
+
+  // ── AGENT 2: Self-Critique + Bias Mitigation ─────────────────────────────
+  setAgentStatus(2, 'active');
+  addLog('  [A2] Evaluador Β: Self-Critique + sesgos...', 'agent');
+
+  const agent2Prompt = buildAgentPrompt(2, tfgText, rubricStr, lang, scaleMin, scaleMax, a1Raw);
+  const a2Data = await callOpenAI([{role:'system', content: getSystemPrompt(2, lang)}, {role:'user', content: agent2Prompt}], state.maxTokens, state.temperature);
+  const a2Raw = a2Data.choices[0].message.content;
+  const a2 = safeParseEvalJSON(a2Raw);
+  setAgentStatus(2, 'done');
+  addLog('  [A2] ✓ Evaluación completada', 'agent');
+
+  if (stopFlag) throw new Error('Detenido');
+
+  // ── AGENT 3: Few-Shot Calibration + Rubric Descriptors ────────────────────
+  setAgentStatus(3, 'active');
+  addLog('  [A3] Evaluador Γ: Few-Shot Calibration...', 'agent');
+
+  const agent3Prompt = buildAgentPrompt(3, tfgText, rubricStr, lang, scaleMin, scaleMax);
+  const a3Data = await callOpenAI([{role:'system', content: getSystemPrompt(3, lang)}, {role:'user', content: agent3Prompt}], state.maxTokens, state.temperature);
+  const a3Raw = a3Data.choices[0].message.content;
+  const a3 = safeParseEvalJSON(a3Raw);
+  setAgentStatus(3, 'done');
+  addLog('  [A3] ✓ Evaluación completada', 'agent');
+
+  if (stopFlag) throw new Error('Detenido');
+
+  // ── AGENT 4: Synthesis ────────────────────────────────────────────────────
+  setAgentStatus(4, 'active');
+  addLog('  [S] Síntesis: resolviendo desacuerdos...', 'synth');
+
+  const synthPrompt = buildSynthesisPrompt(tfgText, rubricStr, lang, scaleMin, scaleMax, a1Raw, a2Raw, a3Raw);
+  const synthData = await callOpenAI([{role:'system', content: getSynthesisSystemPrompt(lang)}, {role:'user', content: synthPrompt}], state.maxTokens + 500, state.temperature - 0.1);
+  const synthRaw = synthData.choices[0].message.content;
+  const synth = safeParseEvalJSON(synthRaw);
+  setAgentStatus(4, 'done');
+  addLog('  [S] ✓ Síntesis completada', 'synth');
+
+  // Calculate final score
+  const finalScore = computeWeightedScore(synth, state.rubricData, scaleMin, scaleMax);
+  const agreement = computeAgreement(a1, a2, a3, state.rubricData, scaleMin, scaleMax);
+
+  return {
+    tfgName: tfg.name,
+    tfgId: tfg.id,
+    finalScore,
+    scaleMin,
+    scaleMax,
+    agreement,
+    agentScores: [
+      computeWeightedScore(a1, state.rubricData, scaleMin, scaleMax),
+      computeWeightedScore(a2, state.rubricData, scaleMin, scaleMax),
+      computeWeightedScore(a3, state.rubricData, scaleMin, scaleMax),
+    ],
+    synthesis: synth,
+    agents: [a1, a2, a3],
+    rubric: state.rubricData,
+  };
+}
+
+function getSystemPrompt(agentNum, lang) {
+  const prompts = {
+    1: `Eres el Evaluador Α, un experto académico que utiliza Chain-of-Evaluation y Evidence-Anchored Scoring.
+Tu metodología:
+1. Para cada criterio y subcriterio, lee el texto del TFG.
+2. Identifica citas textuales EXACTAS que justifiquen la puntuación.
+3. Razona paso a paso (chain-of-thought) antes de asignar cada puntuación.
+4. Cada puntuación DEBE tener una cita textual del TFG. Si no la hay, la puntuación debe ser baja.
+Responde siempre en ${lang}.`,
+    2: `Eres el Evaluador Β, un experto académico especializado en Self-Critique y Bias Mitigation.
+Tu metodología:
+1. Evalúa cada criterio y subcriterio de forma independiente.
+2. Después de cada puntuación, cuestiona tu propio juicio: "¿Estoy siendo demasiado benevolente? ¿Demasiado estricto?"
+3. Evita activamente estos sesgos: efecto halo, sesgo de longitud, sesgo de confirmación, sesgo de primacía.
+4. Proporciona citas textuales del TFG para cada puntuación.
+Responde siempre en ${lang}.`,
+    3: `Eres el Evaluador Γ, un experto académico que usa Few-Shot Calibration y los descriptores completos de la rúbrica.
+Tu metodología:
+1. Aplica los descriptores de nivel excelente/aceptable/insuficiente de la rúbrica estrictamente.
+2. Usa este ejemplo calibrador de referencia: un TFG de nivel 7/10 tiene metodología sólida, revisión bibliográfica adecuada pero conclusiones poco desarrolladas.
+3. Un TFG de nivel 9/10 supera las expectativas en todos los criterios con aportaciones originales.
+4. Fundamenta cada puntuación con citas textuales del TFG.
+Responde siempre en ${lang}.`,
+  };
+  return prompts[agentNum] || prompts[1];
+}
+
+function getSynthesisSystemPrompt(lang) {
+  return `Eres el Agente de Síntesis, responsable de resolver desacuerdos entre evaluadores y generar el informe final.
+Tu metodología:
+1. Compara las puntuaciones de los tres evaluadores por criterio y subcriterio.
+2. Para desacuerdos (diferencia > 15% de la escala), analiza los argumentos y toma una decisión razonada.
+3. Genera feedback formativo completo en formato Feed Up / Feed Back / Feed Forward (Hattie & Timperley, 2007).
+4. El informe final debe ser justo, calibrado y útil para el estudiante.
+Responde siempre en ${lang}.`;
+}
+
+function buildAgentPrompt(agentNum, tfgText, rubricStr, lang, scaleMin, scaleMax, previousEval) {
+  let base = `TAREA: Evalúa este Trabajo de Fin de Grado (TFG) usando la rúbrica proporcionada.
+
+RÚBRICA (escala ${scaleMin}-${scaleMax}):
+${rubricStr}
+
+TEXTO DEL TFG:
+"""
+${tfgText}
+"""
+
+${agentNum === 2 && previousEval ? `EVALUACIÓN DEL AGENTE ANTERIOR (para contraste, NO la copies):
+${previousEval.slice(0, 2000)}
+
+Haz tu evaluación INDEPENDIENTE. Cuestiona las puntuaciones anteriores si crees que están sesgadas.
+
+` : ''}
+INSTRUCCIONES CRÍTICAS:
+1. Evalúa CADA criterio y CADA subcriterio por separado.
+2. La puntuación de cada subcriterio debe estar entre ${scaleMin} y ${scaleMax}.
+3. Para cada subcriterio, proporciona:
+   - reasoning: razonamiento paso a paso
+   - evidence: cita textual EXACTA del TFG (entre comillas)
+   - score: puntuación numérica
+   - selfCritique: autocrítica de la puntuación
+4. Para cada criterio, proporciona feedback formativo (feedUp, feedBack, feedForward).
+
+Responde SOLO con JSON válido (sin markdown):
+{
+  "criteria": [
+    {
+      "name": "nombre exacto del criterio",
+      "subcriteria": [
+        {
+          "name": "nombre del subcriterio",
+          "score": 7.5,
+          "reasoning": "razonamiento paso a paso...",
+          "evidence": "cita textual del TFG...",
+          "selfCritique": "autocrítica..."
+        }
+      ],
+      "feedUp": "qué se pretendía lograr...",
+      "feedBack": "qué se ha logrado...",
+      "feedForward": "cómo mejorar..."
+    }
+  ]
+}`;
+  return base;
+}
+
+function buildSynthesisPrompt(tfgText, rubricStr, lang, scaleMin, scaleMax, a1Raw, a2Raw, a3Raw) {
+  return `TAREA: Sintetiza las evaluaciones de 3 agentes y genera el informe final.
+
+RÚBRICA (escala ${scaleMin}-${scaleMax}):
+${rubricStr}
+
+EVALUACIÓN AGENTE Α:
+${a1Raw.slice(0, 2500)}
+
+EVALUACIÓN AGENTE Β:
+${a2Raw.slice(0, 2500)}
+
+EVALUACIÓN AGENTE Γ:
+${a3Raw.slice(0, 2500)}
+
+INSTRUCCIONES:
+1. Para cada criterio y subcriterio, calcula la puntuación final ponderada.
+2. Si hay desacuerdo entre agentes (diferencia > ${(scaleMax - scaleMin) * 0.15}), justifica tu decisión.
+3. Genera feedback formativo completo y útil para el estudiante.
+4. La síntesis debe ser más reflexiva y detallada que las evaluaciones individuales.
+
+Responde SOLO con JSON válido (misma estructura que los agentes):
+{
+  "criteria": [
+    {
+      "name": "nombre del criterio",
+      "subcriteria": [
+        {
+          "name": "nombre",
+          "score": 7.5,
+          "reasoning": "síntesis del razonamiento de los 3 agentes...",
+          "evidence": "cita más relevante del TFG...",
+          "selfCritique": "reflexión sobre el consenso/desacuerdo...",
+          "agentScores": [7, 8, 7.5]
+        }
+      ],
+      "feedUp": "...",
+      "feedBack": "...",
+      "feedForward": "..."
+    }
+  ]
+}`;
+}
+
+function safeParseEvalJSON(raw) {
+  try {
+    const clean = raw.replace(/```json|```/g,'').trim();
+    return JSON.parse(clean);
+  } catch(e) {
+    return { criteria: [] };
+  }
+}
+
+function computeWeightedScore(evalData, rubricData, scaleMin, scaleMax) {
+  if (!evalData || !evalData.criteria || evalData.criteria.length === 0) return scaleMin;
+  let totalWeight = 0, weightedSum = 0;
+  rubricData.forEach(rc => {
+    const evalCrit = evalData.criteria.find(ec => ec.name === rc.name || ec.name?.toLowerCase() === rc.name?.toLowerCase());
+    if (!evalCrit || !evalCrit.subcriteria) return;
+    let critScore = 0, critScW = 0;
+    rc.subcriteria.forEach(rsc => {
+      const evalSc = evalCrit.subcriteria.find(esc => esc.name === rsc.name || esc.name?.toLowerCase() === rsc.name?.toLowerCase());
+      const sc_score = evalSc ? clamp(parseFloat(evalSc.score) || 0, scaleMin, scaleMax) : scaleMin;
+      critScore += sc_score * (rsc.weight / 100);
+      critScW += rsc.weight;
+    });
+    if (critScW > 0) critScore = critScore / (critScW / 100);
+    weightedSum += critScore * (rc.weight / 100);
+    totalWeight += rc.weight;
+  });
+  if (totalWeight === 0) return scaleMin;
+  return clamp(weightedSum / (totalWeight / 100), scaleMin, scaleMax);
+}
+
+function computeAgreement(a1, a2, a3, rubricData, scaleMin, scaleMax) {
+  const s1 = computeWeightedScore(a1, rubricData, scaleMin, scaleMax);
+  const s2 = computeWeightedScore(a2, rubricData, scaleMin, scaleMax);
+  const s3 = computeWeightedScore(a3, rubricData, scaleMin, scaleMax);
+  const range = scaleMax - scaleMin;
+  const maxDiff = Math.max(Math.abs(s1-s2), Math.abs(s2-s3), Math.abs(s1-s3));
+  return Math.max(0, 100 - (maxDiff / range * 100));
+}
+
+function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+
+// ── RESULTS RENDERING ─────────────────────────────────────────────────────────
+function renderResults() {
+  const container = document.getElementById('results-container');
+  const empty = document.getElementById('results-empty');
+  const summary = document.getElementById('results-summary-bar');
+
+  if (state.results.length === 0) {
+    empty.classList.remove('hidden');
+    summary.classList.add('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  summary.classList.remove('hidden');
+
+  // Summary
+  const avg = state.results.reduce((s,r) => s + r.finalScore, 0) / state.results.length;
+  const avgAgree = state.results.reduce((s,r) => s + r.agreement, 0) / state.results.length;
+  document.getElementById('sum-total').textContent = state.results.length;
+  document.getElementById('sum-avg').textContent = avg.toFixed(2);
+  document.getElementById('sum-agree').textContent = avgAgree.toFixed(0) + '%';
+  document.getElementById('sum-desc').textContent =
+    `Escala ${state.scaleMin}–${state.scaleMax} · ${state.rubricData.length} criterios · 3 agentes evaluadores + síntesis`;
+
+  container.innerHTML = state.results.map((r, ri) => {
+    const agreeClass = r.agreement > 80 ? 'agree-high' : r.agreement > 60 ? 'agree-med' : 'agree-low';
+    return `
+    <div class="tfg-result-block">
+      <div class="tfg-result-header" onclick="toggleResultBlock(${ri})">
+        <div class="final-score">${r.finalScore.toFixed(1)}</div>
+        <div class="tfg-title-block">
+          <div class="tfg-filename">${escHtml(r.tfgName)}</div>
+          <div class="tfg-meta">Agentes: ${r.agentScores.map((s,i)=>`A${i+1}: ${s.toFixed(1)}`).join(' · ')} · Síntesis: ${r.finalScore.toFixed(2)}</div>
+        </div>
+        <span class="agreement-badge ${agreeClass}">Acuerdo ${r.agreement.toFixed(0)}%</span>
+        <span style="color:var(--text3);font-size:18px;margin-left:8px;" id="chevron-${ri}">▾</span>
+      </div>
+      <div class="tfg-result-body" id="result-body-${ri}">
+        ${renderCriteriaResults(r, ri)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleResultBlock(ri) {
+  const body = document.getElementById('result-body-' + ri);
+  const ch = document.getElementById('chevron-' + ri);
+  body.classList.toggle('open');
+  ch.textContent = body.classList.contains('open') ? '▴' : '▾';
+}
+
+function renderCriteriaResults(r, ri) {
+  if (!r.synthesis || !r.synthesis.criteria) return '<div class="text-muted text-sm">Sin datos</div>';
+  return r.synthesis.criteria.map((c, ci) => {
+    const rubricCrit = r.rubric.find(rc => rc.name === c.name) || {};
+    const critScore = c.subcriteria ? c.subcriteria.reduce((sum, sc) => {
+      const rsc = (rubricCrit.subcriteria || []).find(rs => rs.name === sc.name) || { weight: 100 };
+      return sum + (parseFloat(sc.score) || 0) * (rsc.weight / 100);
+    }, 0) / ((rubricCrit.subcriteria?.reduce((s,sc) => s + sc.weight, 0) || 100) / 100) : 0;
+
+    return `
+    <div class="criterion-result">
+      <div class="cr-header">
+        <span class="cr-name">${escHtml(c.name)}</span>
+        <span class="cr-weight">peso: ${rubricCrit.weight || '?'}%</span>
+        <span class="cr-score">${critScore.toFixed(1)}</span>
+      </div>
+      <div class="cr-body">
+        ${(c.subcriteria || []).map((sc, sci) => renderScResult(sc, sci, ri, ci)).join('')}
+        <div class="feed-section mt16">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div>
+              <div class="feed-label feed-up-label">Feed Up — Objetivo</div>
+              <div class="feed-text">${escHtml(c.feedUp || '')}</div>
+            </div>
+            <div>
+              <div class="feed-label feed-back-label">Feed Back — Logro</div>
+              <div class="feed-text">${escHtml(c.feedBack || '')}</div>
+            </div>
+            <div>
+              <div class="feed-label feed-forward-label">Feed Forward — Mejora</div>
+              <div class="feed-text">${escHtml(c.feedForward || '')}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderScResult(sc, sci, ri, ci) {
+  const agScores = sc.agentScores || [];
+  const hasDis = agScores.length === 3 && (Math.max(...agScores) - Math.min(...agScores)) > (state.scaleMax - state.scaleMin) * 0.15;
+  const uid = `sc_${ri}_${ci}_${sci}`;
+  return `
+  <div class="sc-result-row">
+    <div class="sc-result-top">
+      <span class="sc-name">${escHtml(sc.name || '')}</span>
+      ${agScores.length > 0 ? `<div class="agents-scores">${agScores.map((s,i) => `<span class="agent-score-chip">A${i+1}:${parseFloat(s).toFixed(1)}</span>`).join('')}</div>` : ''}
+      <span class="sc-score-pill">${parseFloat(sc.score || 0).toFixed(1)}</span>
+      ${hasDis ? `<span class="sc-disagreement">⚠ desacuerdo</span>` : ''}
+    </div>
+    ${sc.evidence ? `<div class="sc-evidence"><strong>Evidencia:</strong> "${escHtml(sc.evidence)}"</div>` : ''}
+    <button class="reasoning-toggle" onclick="toggleReasoning('${uid}')">▸ Ver razonamiento</button>
+    <div class="reasoning-box" id="reasoning-${uid}">
+      ${escHtml(sc.reasoning || '')}
+      ${sc.selfCritique ? `<br><br><em style="color:var(--amber)">Autocrítica: ${escHtml(sc.selfCritique)}</em>` : ''}
+    </div>
+  </div>`;
+}
+
+function toggleReasoning(uid) {
+  const box = document.getElementById('reasoning-' + uid);
+  const btn = box.previousElementSibling;
+  box.classList.toggle('open');
+  btn.textContent = box.classList.contains('open') ? '▾ Ocultar razonamiento' : '▸ Ver razonamiento';
+}
+
+// ── CSV / EXPORT ──────────────────────────────────────────────────────────────
+function buildCsvData() {
+  const rows = [];
+  const headers = [
+    'TFG', 'Criterio', 'Peso_Criterio_%', 'Subcriterio', 'Peso_Subcriterio_%',
+    'Puntuacion_Final', 'Puntuacion_A1', 'Puntuacion_A2', 'Puntuacion_A3',
+    'Acuerdo_%', 'Evidencia_Textual', 'Razonamiento', 'Autocritica',
+    'FeedUp', 'FeedBack', 'FeedForward', 'Nota_Final_TFG'
+  ];
+  rows.push(headers);
+
+  state.results.forEach(r => {
+    if (!r.synthesis || !r.synthesis.criteria) return;
+    r.synthesis.criteria.forEach((c, ci) => {
+      const rubricCrit = r.rubric.find(rc => rc.name === c.name) || {};
+      (c.subcriteria || []).forEach((sc, sci) => {
+        const rubricSc = (rubricCrit.subcriteria || [])[sci] || {};
+        const agScores = sc.agentScores || [];
+        const a1sc = agScores[0] !== undefined ? agScores[0] : '';
+        const a2sc = agScores[1] !== undefined ? agScores[1] : '';
+        const a3sc = agScores[2] !== undefined ? agScores[2] : '';
+        rows.push([
+          r.tfgName,
+          c.name,
+          rubricCrit.weight || '',
+          sc.name,
+          rubricSc.weight || '',
+          typeof sc.score === 'number' ? sc.score.toFixed(2) : sc.score,
+          a1sc !== '' ? parseFloat(a1sc).toFixed(2) : '',
+          a2sc !== '' ? parseFloat(a2sc).toFixed(2) : '',
+          a3sc !== '' ? parseFloat(a3sc).toFixed(2) : '',
+          r.agreement.toFixed(0),
+          (sc.evidence || '').replace(/"/g,"'"),
+          (sc.reasoning || '').replace(/"/g,"'").replace(/\n/g,' '),
+          (sc.selfCritique || '').replace(/"/g,"'"),
+          (c.feedUp || '').replace(/"/g,"'"),
+          (c.feedBack || '').replace(/"/g,"'"),
+          (c.feedForward || '').replace(/"/g,"'"),
+          r.finalScore.toFixed(2),
+        ]);
+      });
+    });
+  });
+  return rows;
+}
+
+function downloadCSV() {
+  const rows = buildCsvData();
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'evaluacion_tfg_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+function downloadJSON() {
+  const blob = new Blob([JSON.stringify(state.results, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'evaluacion_tfg_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+}
+
+function toggleCsvPreview() {
+  const area = document.getElementById('csv-preview-area');
+  area.classList.toggle('hidden');
+  if (!area.classList.contains('hidden')) {
+    renderCsvPreview();
+  }
+}
+
+function renderCsvPreview() {
+  const rows = buildCsvData();
+  if (rows.length < 2) return;
+  const headers = rows[0];
+  const data = rows.slice(1, 21);
+  const wrap = document.getElementById('csv-table-wrap');
+  wrap.innerHTML = `<table>
+    <thead><tr>${headers.map(h => `<th>${escHtml(h)}</th>`).join('')}</tr></thead>
+    <tbody>${data.map(r => `<tr>${r.map(v => `<td>${escHtml(String(v))}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ── UTILS ────────────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateWeightDisplay();
+  document.getElementById('model-select').addEventListener('change', e => state.model = e.target.value);
+});
+</script>
+</body>
+</html>
