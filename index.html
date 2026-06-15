@@ -1653,9 +1653,27 @@ function clearSession() {
 function checkForRecoverableSession() {
   const session = loadSession();
   if(!session || !session.results || session.results.length === 0) return;
-  // Check it's recent (within 7 days)
   const age = Date.now() - new Date(session.lastUpdated||session.date).getTime();
   if(age > 7*24*60*60*1000) { clearSession(); return; }
+
+  // ── Detect corrupt session: all scores are 0 ──────────────────────────────
+  const allZero = session.results.every(r => r.finalScore === 0 || r.finalScore == null);
+  if(allZero && session.results.length > 0) {
+    const banner = document.getElementById('session-recovery-banner');
+    if(banner) {
+      banner.classList.remove('hidden');
+      banner.innerHTML = `<div class="session-banner" style="border-color:rgba(255,107,107,0.3);background:rgba(255,107,107,0.06);">
+        <div class="session-banner-icon">🗑</div>
+        <div class="session-banner-body">
+          <div class="session-banner-title" style="color:var(--red);">Sesión corrupta detectada (notas todas a 0)</div>
+          <div class="session-banner-meta">Generada con una versión anterior con bug en el prompt. Debe eliminarse antes de reevaluar.</div>
+        </div>
+        <button class="btn sm danger" onclick="discardSession()">✕ Eliminar y reevaluar</button>
+      </div>`;
+    }
+    return;
+  }
+
   const banner = document.getElementById('session-recovery-banner');
   if(!banner) return;
   const n = session.results.length;
@@ -2409,12 +2427,50 @@ async function evaluateTfg(tfg) {
   const a1Raw = a1Result.status==='fulfilled' ? a1Result.value.choices[0].message.content : '{"criteria":[]}';
   const a2Raw = a2Result.status==='fulfilled' ? a2Result.value.choices[0].message.content : '{"criteria":[]}';
   const a3Raw = a3Result.status==='fulfilled' ? a3Result.value.choices[0].message.content : '{"criteria":[]}';
-  const a1=safeParseEvalJSON(a1Raw), a2=safeParseEvalJSON(a2Raw), a3=safeParseEvalJSON(a3Raw);
-  [a1Result,a2Result,a3Result].forEach((r,i)=>{
-    if(r.status==='rejected') addLog(`  [A${i+1}] ⚠ falló: ${r.reason?.message}`,'warn');
+
+  // ── Diagnóstico: mostrar preview del raw y detectar JSON vacío en agentes ─
+  [a1Result, a2Result, a3Result].forEach((r,i) => {
+    if(r.status==='rejected') {
+      addLog(`  [A${i+1}] ✗ falló: ${r.reason?.message}`, 'err');
+    } else {
+      const raw = [a1Raw,a2Raw,a3Raw][i];
+      const preview = raw.replace(/\s+/g,' ').slice(0,120);
+      addLog(`  [A${i+1}] raw preview: ${preview}`, 'info');
+      console.log(`Agent A${i+1} raw output:`, raw);
+    }
   });
+
+  let a1=safeParseEvalJSON(a1Raw), a2=safeParseEvalJSON(a2Raw), a3=safeParseEvalJSON(a3Raw);
+
+  // ── Safety net: si los 3 agentes devuelven criteria vacíos, reintenta ─────
+  const allEmpty = [a1,a2,a3].every(a => !a.criteria || a.criteria.length===0);
+  if(allEmpty) {
+    addLog('  ⚠ Los 3 agentes devolvieron JSON vacío — reintentando con prompt simplificado...', 'warn');
+    // Simplified direct prompt — no examples, no elaborate instructions, just the task
+    const simplifiedPrompt = buildSimplifiedEvalPrompt(tfgText, state.rubricData, scaleMin, scaleMax, lang);
+    const [r1,r2,r3] = await Promise.allSettled([
+      callOpenAI([{role:'user', content:simplifiedPrompt}], state.maxTokens, 0.2),
+      callOpenAI([{role:'user', content:simplifiedPrompt}], state.maxTokens, 0.3),
+      callOpenAI([{role:'user', content:simplifiedPrompt}], state.maxTokens, 0.1),
+    ]);
+    const raws = [r1,r2,r3].map(r => r.status==='fulfilled' ? r.value.choices[0].message.content : '{"criteria":[]}');
+    raws.forEach((raw,i) => {
+      addLog(`  [A${i+1}-retry] raw preview: ${raw.replace(/\s+/g,' ').slice(0,120)}`, 'info');
+      console.log(`Agent A${i+1} retry raw:`, raw);
+    });
+    a1=safeParseEvalJSON(raws[0]);
+    a2=safeParseEvalJSON(raws[1]);
+    a3=safeParseEvalJSON(raws[2]);
+    const stillEmpty = [a1,a2,a3].every(a => !a.criteria || a.criteria.length===0);
+    if(stillEmpty) {
+      addLog('  ✗ Reintento también vacío — revisa la consola del navegador (F12)', 'err');
+    } else {
+      addLog('  ✓ Reintento exitoso — agentes devolvieron JSON válido', 'ok');
+    }
+  }
+
   setAgentStatus(1,'done'); setAgentStatus(2,'done'); setAgentStatus(3,'done');
-  addLog('  [A1][A2][A3] ✓ evaluaciones independientes completadas','agent');
+  addLog('  [A1][A2][A3] ✓ evaluaciones completadas','agent');
   if(stopFlag) throw new Error('Detenido');
 
   // ── M3: acuerdo por criterio (no solo nota global) ────────────────────────
@@ -2441,11 +2497,17 @@ async function evaluateTfg(tfg) {
   });
   const synthData=await callOpenAI([{role:'system',content:sysS},{role:'user',content:usrS}],state.maxTokens+800,Math.max(0,state.temperature-0.1));
   const synthRaw=synthData.choices[0].message.content;
+  addLog(`  [S] raw preview: ${synthRaw.replace(/\s+/g,' ').slice(0,120)}`, 'info');
+  console.log('Synthesis raw output:', synthRaw);
   const synth=safeParseEvalJSON(synthRaw);
   if(!synth.criteria||synth.criteria.length===0){
     addLog('  [S] ⚠ JSON vacío — usando promedio de agentes como fallback','warn');
-    console.warn('Synthesis raw:',synthRaw);
     synth.criteria = buildFallbackSynthesis(a1,a2,a3,state.rubricData);
+    // If fallback also all-zero (agents were empty), log a clear error
+    const fallbackScore = computeWeightedScore(synth, state.rubricData, scaleMin, scaleMax);
+    if(fallbackScore === scaleMin) {
+      addLog('  [S] ✗ Fallback también a 0 — los agentes devolvieron JSON vacío. Revisa la consola (F12).', 'err');
+    }
   }
   setAgentStatus(4,'done'); addLog('  [S] ✓','synth');
 
@@ -3140,6 +3202,45 @@ function buildImprovementPlan(synth,rubricData,scaleMin,scaleMax){
     });
   });
   return items.sort((a,b)=>b.impact-a.impact).slice(0,5);
+}
+
+// ── Prompt simplificado de emergencia (sin interpolación de llaves) ───────────
+// Se usa como reintento cuando el prompt principal no produce JSON válido.
+// Diseñado para ser lo más directo posible: sin ejemplos, sin variables complejas.
+function buildSimplifiedEvalPrompt(tfgText, rubricData, scaleMin, scaleMax, lang) {
+  const criteriaStr = rubricData.map(rc =>
+    `CRITERIO: "${rc.name}" (peso ${rc.weight}%)\n` +
+    rc.subcriteria.map(sc => `  - SUBCRITERIO: "${sc.name}" (peso ${sc.weight}%)`).join('\n')
+  ).join('\n\n');
+
+  // Build expected JSON structure explicitly without any template variables
+  const jsonStructure = '{"criteria":[' +
+    rubricData.map(rc =>
+      '{"name":"' + rc.name.replace(/"/g,'\\"') + '","subcriteria":[' +
+      rc.subcriteria.map(sc =>
+        '{"name":"' + sc.name.replace(/"/g,'\\"') + '","score":7,"reasoning":"evaluación del subcriterio","evidence":"texto del TFG","selfCritique":"autocrítica"}'
+      ).join(',') +
+      '],"feedUp":"objetivo","feedBack":"logro","feedForward":"mejora"}'
+    ).join(',') +
+  ']}';
+
+  return `Eres un evaluador académico experto. Evalúa este Trabajo de Fin de Grado.
+
+TEXTO DEL TFG (extracto):
+${tfgText.slice(0, 8000)}
+
+CRITERIOS DE EVALUACIÓN (escala ${scaleMin} a ${scaleMax}):
+${criteriaStr}
+
+INSTRUCCIONES:
+- Asigna una puntuación entre ${scaleMin} y ${scaleMax} a cada subcriterio basándote en el texto.
+- Sé riguroso: usa toda la escala. Un trabajo mediocre debe recibir notas intermedias, no extremos.
+- Incluye una cita textual del TFG como evidencia de cada puntuación.
+- Responde EXACTAMENTE con este formato JSON (sin texto antes ni después, sin markdown):
+
+${jsonStructure}
+
+Sustituye los valores de ejemplo por tu evaluación real. Responde en ${lang}.`;
 }
 
 // ── Fallback síntesis cuando el JSON del agente S falla ──────────────────────
