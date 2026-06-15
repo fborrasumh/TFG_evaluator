@@ -917,14 +917,14 @@ INSTRUCCIONES:
 - Incluye contexto suficiente para que la cita sea comprensible (frases completas).
 
 Responde SOLO con JSON válido (sin markdown):
-{
+{{
   "extractions": [
-    {
+    {{
       "criterion": "nombre exacto del criterio",
       "text": "texto extraído literalmente del fragmento..."
-    }
+    }}
   ]
-}`,
+}}`,
   system1: `Eres el Evaluador Α, un experto académico que utiliza Chain-of-Evaluation y Evidence-Anchored Scoring.
 
 Tu metodología:
@@ -996,25 +996,25 @@ INSTRUCCIONES CRÍTICAS:
    - feedForward: recomendaciones concretas de mejora
 
 Responde SOLO con JSON válido sin markdown ni texto adicional:
-{
+{{
   "criteria": [
-    {
+    {{
       "name": "nombre exacto del criterio",
       "subcriteria": [
-        {
+        {{
           "name": "nombre del subcriterio",
           "score": 7.5,
           "reasoning": "razonamiento paso a paso...",
           "evidence": "cita textual del TFG...",
           "selfCritique": "autocrítica..."
-        }
+        }}
       ],
       "feedUp": "objetivo del criterio...",
       "feedBack": "logro del estudiante...",
       "feedForward": "cómo mejorar..."
-    }
+    }}
   ]
-}`,
+}}`,
 
   user_synth: `TAREA: Sintetiza las evaluaciones de 3 agentes y genera el informe final de evaluación.
 
@@ -1038,26 +1038,26 @@ INSTRUCCIONES:
 5. Incluye en cada subcriterio el campo "agentScores" con las puntuaciones de los 3 agentes.
 
 Responde SOLO con JSON válido (misma estructura que los agentes), añadiendo el campo agentScores:
-{
+{{
   "criteria": [
-    {
+    {{
       "name": "nombre del criterio",
       "subcriteria": [
-        {
+        {{
           "name": "nombre",
           "score": 7.5,
           "reasoning": "síntesis del razonamiento...",
           "evidence": "cita más relevante...",
           "selfCritique": "reflexión sobre consenso/desacuerdo...",
           "agentScores": [7, 8, 7.5]
-        }
+        }}
       ],
       "feedUp": "...",
       "feedBack": "...",
       "feedForward": "..."
-    }
+    }}
   ]
-}`
+}}`
 };
 
 const PROMPT_VARS = {
@@ -1761,15 +1761,17 @@ async function startEvaluation() {
 async function runEvaluationLoop(filesToEvaluate) {
   // Skip files already in state.results (from resumed session)
   const pending = filesToEvaluate.filter(f => !state.results.some(r=>r.tfgName===f.name));
-  const totalAll = filesToEvaluate.length + state.results.length;
+  const totalPending = pending.length;
+  const alreadyDone  = state.results.length;   // completed before this loop
+  const totalAll     = alreadyDone + totalPending;
   const failedTfgs=[];
   for(let i=0;i<pending.length;i++){
     if(stopFlag)break;
     const tfg=pending[i];
     tfg.status='evaluating';renderTfgList();
-    const doneCount = state.results.length + i;
+    const doneCount = alreadyDone + i;          // how many done so far (including pre-existing)
     addLog(`▶ [${doneCount+1}/${totalAll}] ${tfg.name}`,'info');
-    setProgress(Math.round((doneCount/totalAll)*90),`TFG ${doneCount+1}/${totalAll}: ${tfg.name}`);
+    setProgress(Math.round((doneCount/Math.max(totalAll,1))*90),`TFG ${doneCount+1}/${totalAll}: ${tfg.name}`);
     try {
       const result=await evaluateTfg(tfg);
       state.results.push(result);
@@ -1824,8 +1826,15 @@ async function retryFailed() {
 }
 
 // PROMPT INTERPOLATION
+// Supports {{literal}} for braces that should NOT be interpolated
 function interpolate(template,vars){
-  return template.replace(/\{(\w+)\}/g,(m,k)=>vars[k]!==undefined?vars[k]:m);
+  // First pass: replace {{...}} with a safe placeholder
+  const OPEN='__LBRACE__', CLOSE='__RBRACE__';
+  let s = template.replace(/\{\{/g, OPEN).replace(/\}\}/g, CLOSE);
+  // Second pass: replace {varName} with values
+  s = s.replace(/\{(\w+)\}/g,(m,k)=>vars[k]!==undefined?vars[k]:m);
+  // Third pass: restore literal braces
+  return s.replace(new RegExp(OPEN,'g'),'{').replace(new RegExp(CLOSE,'g'),'}');
 }
 
 // ── AGENT 0: EXTRACTOR ────────────────────────────────────────────────────────
@@ -1954,24 +1963,24 @@ const GS_PATRONES = [
    'orden de ignorar instrucciones'],
   [/olvida[\s.\-_,;:]*(?:lo\s+)?(?:anterior|todo|tus\s+instrucciones)/i,
    'orden de olvidar contexto'],
-  [/(?:nuevo|nueva|ahora\s+eres|actua\s+como|eres\s+ahora)/i,
+  [/(?:ahora\s+eres\s+un|actua\s+como\s+(?:si\s+)?(?:no\s+tuvieras|un\s+modelo|una\s+ia)|eres\s+ahora\s+(?:un|una))/i,
    'intento de redefinir identidad del modelo'],
-  [/(?:system\s*prompt|instrucciones\s*del\s*sistema)/i,
+  [/(?:system\s*prompt|instrucciones\s*del\s*sistema)\b/i,
    'referencia a instrucciones del sistema'],
-  [/(?:bypass|override|jailbreak|modo\s*dios|sin\s*restricciones)/i,
+  [/(?:bypass|override|jailbreak|modo\s*dios|sin\s*restricciones)\b/i,
    'intento de bypass de restricciones'],
-  [/(?:dan|do\s+anything\s+now|developer\s+mode)/i,
+  [/(?:\bdan\b|do\s+anything\s+now|developer\s+mode)/i,
    'modo desarrollador / DAN'],
-  [/(?:repite|reproduce|muestra|imprime)\s+(?:tus\s+)?(?:instrucciones|prompt|sistema)/i,
+  [/(?:repite|reproduce|muestra|imprime)\s+(?:tus\s+)?(?:instrucciones|prompt|sistema)\b/i,
    'solicitud de revelar instrucciones'],
-  // Manipulación de notas
-  [/(?:pon|asigna|dame|coloca|escribe)\s+.{0,20}(?:10|diez|maxim|sobresaliente)/i,
-   'solicitud de nota máxima'],
-  [/(?:nota|calificacion|puntuacion)\s*.{0,10}\s*(?:maxim|10|diez|perfect)/i,
-   'manipulación de calificación'],
+  // Manipulación de notas (requieren contexto explícito de nota/calificación)
+  [/(?:pon|asigna|dame|coloca)\s+.{0,15}(?:un\s+10|nota\s+(?:de\s+)?10|nota\s+maxima|un\s+sobresaliente|nota\s+perfecta)/i,
+   'solicitud explícita de nota máxima'],
+  [/(?:mi\s+nota|la\s+calificacion|la\s+puntuacion)\s*.{0,10}\s*(?:debe\s+ser\s+)?(?:10|diez|la\s+maxima|perfecta)/i,
+   'manipulación directa de calificación'],
   [/(?:aproba(?:r|do)|suspen(?:der|so))\s+(?:me|nos|les)\s+(?:de\s+)?todas\s+formas/i,
    'solicitud de aprobar sin criterio'],
-  [/merec[eo]\s+(?:un\s+)?(?:10|diez|la\s+mejor)/i,
+  [/merec[eo]\s+(?:un\s+)?(?:10|diez|la\s+mejor\s+nota|sobresaliente)/i,
    'alegación de merecer nota máxima'],
   // Inyección de contexto falso
   [/(?:el\s+profesor|el\s+docente|el\s+sistema)\s+(?:ha\s+)?(?:dicho|indicado|autorizado)/i,
@@ -1999,47 +2008,63 @@ function gsCheckRegex(textoNorm) {
 }
 
 // ── CAPA 2: Análisis estructural ─────────────────────────────────────────────
-const GS_VERBOS_COMANDO = ['ignora','olvida','pon','asigna','actua','eres',
-  'muestra','repite','imprime','revela','dime'];
+// Verbos de comando SOLO cuando van seguidos de objeto relacionado con el sistema IA
+// (no en cualquier contexto académico)
+const GS_VERBOS_COMANDO = [
+  // Solo contar cuando van SEGUIDOS de términos relacionados con instrucciones/IA
+  // Se evalúan en contexto de frase, no como palabras sueltas
+];
+
+const GS_COMMAND_PATTERNS = [
+  /\bignora\b.{0,30}(?:instrucciones?|reglas?|sistema|prompt|anterior)/i,
+  /\bolvida\b.{0,30}(?:anterior|todo|instrucciones?)/i,
+  /\bactua\b.{0,20}como\b/i,
+  /\beras\s+ahora\b/i,
+  /\bpon\b.{0,20}(?:nota|calificaci[oó]n|un\s+10|diez)/i,
+  /\basigna\b.{0,20}(?:nota|calificaci[oó]n|un\s+10|diez)/i,
+  /\bmuestra\b.{0,20}(?:tus\s+instrucciones?|el\s+prompt|sistema)/i,
+  /\brepite\b.{0,20}(?:tus\s+instrucciones?|el\s+prompt)/i,
+  /\brevela\b.{0,20}(?:instrucciones?|prompt|sistema)/i,
+];
 
 function gsCheckEstructural(textoOriginal) {
   const problemas = [];
   const textoLow = textoOriginal.toLowerCase();
 
-  // 2a. Frases imperativas dirigidas al modelo
+  // 2a. Frases imperativas dirigidas AL MODELO (con contexto, no palabras sueltas)
   const partes = textoOriginal.split(/[.!?]\s+/);
   const nImp = partes.filter(p =>
-    /^\s*(ignora|olvida|pon|asigna|actua|eres|ahora)/i.test(p)
+    /^\s*(ignora|olvida)\s+(tus\s+)?(?:instrucciones?|reglas?|sistema|anterior|todo)/i.test(p)
   ).length;
-  if(nImp >= 2) problemas.push({ capa:'estructural', icono:'🔍',
-    desc:`${nImp} frases imperativas dirigidas al modelo` });
+  if(nImp >= 1) problemas.push({ capa:'estructural', icono:'🔍',
+    desc:`${nImp} frase(s) imperativa(s) dirigida(s) al modelo con contexto de instrucciones` });
 
-  // 2b. Densidad de verbos de comando
-  const verbosEnc = GS_VERBOS_COMANDO.filter(v => textoLow.includes(v));
-  if(verbosEnc.length >= 3) problemas.push({ capa:'estructural', icono:'🔍',
-    desc:`Alta densidad de verbos de comando (${verbosEnc.length}): ${verbosEnc.join(', ')}` });
+  // 2b. Patrones de comando con contexto (no palabras sueltas)
+  const commandHits = GS_COMMAND_PATTERNS.filter(p => p.test(textoOriginal));
+  if(commandHits.length >= 2) problemas.push({ capa:'estructural', icono:'🔍',
+    desc:`${commandHits.length} patrones de comando con contexto detectados` });
 
-  // 2c. Texto corto + muchos comandos
+  // 2c. Texto muy corto + patrones de manipulación directa
   const nPalabras = textoOriginal.split(/\s+/).filter(Boolean).length;
-  if(nPalabras < 50 && verbosEnc.length >= 2) problemas.push({ capa:'estructural', icono:'🔍',
-    desc:`Texto muy corto (${nPalabras} palabras) con alta densidad de comandos` });
+  const nDirectos = GS_COMMAND_PATTERNS.filter(p => p.test(textoOriginal)).length;
+  if(nPalabras < 80 && nDirectos >= 1) problemas.push({ capa:'estructural', icono:'🔍',
+    desc:`Texto corto (${nPalabras} palabras) con patrón de manipulación` });
 
   // 2d. Caracteres unicode de control
   const charsCtrl = [...textoOriginal].filter(c => {
     const cat = c.codePointAt(0);
-    // Cf = format, range 0x200B–0x206F, 0xFEFF, BOM variants
     return (cat >= 0x200B && cat <= 0x200F) || (cat >= 0x202A && cat <= 0x202E) ||
            (cat >= 0x2060 && cat <= 0x206F) || cat === 0xFEFF;
   });
   if(charsCtrl.length > 0) problemas.push({ capa:'estructural', icono:'🔍',
-    desc:`Caracteres unicode de control detectados: ${[...new Set(charsCtrl)].map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase()).join(', ')}` });
+    desc:`Caracteres unicode de control: ${[...new Set(charsCtrl)].map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase()).join(', ')}` });
 
   // 2e. Inyección en inglés dentro de texto español
   const engMatch = textoOriginal.toLowerCase().match(
-    /\b(ignore|forget|you are now|act as|new task|disregard)\b/
+    /\b(ignore\s+(?:previous\s+)?instructions?|forget\s+(?:everything|previous)|you\s+are\s+now|act\s+as\s+(?:a|an)|new\s+task\s*:|disregard\s+(?:previous|all))\b/
   );
   if(engMatch) problemas.push({ capa:'estructural', icono:'🔍',
-    desc:`Posible inyección en inglés: "${engMatch[0]}"` });
+    desc:`Inyección en inglés: "${engMatch[0]}"` });
 
   return problemas;
 }
