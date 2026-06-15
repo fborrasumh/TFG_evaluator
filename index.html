@@ -535,13 +535,17 @@
     </div>
     <div class="form-row">
       <div class="form-group mb8">
-        <label>Máx. tokens por agente</label>
-        <input type="number" id="max-tokens" value="2000" min="500" max="4000" step="100" style="max-width:120px;" oninput="updateCostEstimate()">
+        <label>Máx. tokens por agente <span style="font-size:11px;color:var(--amber);">⚠ mínimo recomendado: 4000 (JSON completo)</span></label>
+        <input type="number" id="max-tokens" value="4000" min="1000" max="8000" step="500" style="max-width:120px;" oninput="updateCostEstimate()">
       </div>
       <div class="form-group mb8">
         <label>Máx. caracteres del TFG enviados al prompt</label>
         <input type="number" id="max-chars" value="12000" min="2000" max="40000" step="1000" style="max-width:160px;" oninput="updateCostEstimate()">
       </div>
+    </div>
+    <div style="margin-top:4px;padding:10px 14px;background:rgba(255,107,107,0.07);border:1px solid rgba(255,107,107,0.2);border-radius:var(--radius-sm);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span>🗑 ¿Resultados con nota 0? Puede haber una sesión corrupta guardada en el navegador.</span>
+      <button class="btn sm danger" onclick="if(confirm('¿Limpiar TODO el localStorage? Se borrarán sesiones, memoria histórica y datos guardados.')){localStorage.clear();location.reload();}">Limpiar localStorage y recargar</button>
     </div>
     <div id="cost-estimate-bar" class="cost-bar hidden">
       <span style="font-size:12px;color:var(--text3);">Estimación por TFG:</span>
@@ -2446,12 +2450,14 @@ async function evaluateTfg(tfg) {
   const allEmpty = [a1,a2,a3].every(a => !a.criteria || a.criteria.length===0);
   if(allEmpty) {
     addLog('  ⚠ Los 3 agentes devolvieron JSON vacío — reintentando con prompt simplificado...', 'warn');
-    // Simplified direct prompt — no examples, no elaborate instructions, just the task
+    // Simplified direct prompt — no interpolation, no elaborate instructions
     const simplifiedPrompt = buildSimplifiedEvalPrompt(tfgText, state.rubricData, scaleMin, scaleMax, lang);
+    // Use higher token limit for retry to ensure complete JSON
+    const retryTokens = Math.max(state.maxTokens, 4000);
     const [r1,r2,r3] = await Promise.allSettled([
-      callOpenAI([{role:'user', content:simplifiedPrompt}], state.maxTokens, 0.2),
-      callOpenAI([{role:'user', content:simplifiedPrompt}], state.maxTokens, 0.3),
-      callOpenAI([{role:'user', content:simplifiedPrompt}], state.maxTokens, 0.1),
+      callOpenAI([{role:'user', content:simplifiedPrompt}], retryTokens, 0.2),
+      callOpenAI([{role:'user', content:simplifiedPrompt}], retryTokens, 0.3),
+      callOpenAI([{role:'user', content:simplifiedPrompt}], retryTokens, 0.1),
     ]);
     const raws = [r1,r2,r3].map(r => r.status==='fulfilled' ? r.value.choices[0].message.content : '{"criteria":[]}');
     raws.forEach((raw,i) => {
@@ -3204,43 +3210,43 @@ function buildImprovementPlan(synth,rubricData,scaleMin,scaleMax){
   return items.sort((a,b)=>b.impact-a.impact).slice(0,5);
 }
 
-// ── Prompt simplificado de emergencia (sin interpolación de llaves) ───────────
-// Se usa como reintento cuando el prompt principal no produce JSON válido.
-// Diseñado para ser lo más directo posible: sin ejemplos, sin variables complejas.
+// ── Prompt simplificado de emergencia ────────────────────────────────────────
+// NO usa interpolate() — construye el string directamente para evitar
+// cualquier problema de llaves. Se usa como reintento cuando el prompt
+// principal produce JSON vacío.
 function buildSimplifiedEvalPrompt(tfgText, rubricData, scaleMin, scaleMax, lang) {
-  const criteriaStr = rubricData.map(rc =>
-    `CRITERIO: "${rc.name}" (peso ${rc.weight}%)\n` +
-    rc.subcriteria.map(sc => `  - SUBCRITERIO: "${sc.name}" (peso ${sc.weight}%)`).join('\n')
-  ).join('\n\n');
+  const criteriaLines = rubricData.map((rc, ci) =>
+    (ci+1) + '. CRITERIO "' + rc.name + '" (peso ' + rc.weight + '%):\n' +
+    rc.subcriteria.map((sc, si) =>
+      '   ' + (ci+1) + '.' + (si+1) + '. Subcriterio "' + sc.name + '" (peso ' + sc.weight + '%)'
+    ).join('\n')
+  ).join('\n');
 
-  // Build expected JSON structure explicitly without any template variables
-  const jsonStructure = '{"criteria":[' +
-    rubricData.map(rc =>
-      '{"name":"' + rc.name.replace(/"/g,'\\"') + '","subcriteria":[' +
-      rc.subcriteria.map(sc =>
-        '{"name":"' + sc.name.replace(/"/g,'\\"') + '","score":7,"reasoning":"evaluación del subcriterio","evidence":"texto del TFG","selfCritique":"autocrítica"}'
-      ).join(',') +
-      '],"feedUp":"objetivo","feedBack":"logro","feedForward":"mejora"}'
-    ).join(',') +
-  ']}';
+  // Pre-build the expected JSON as a plain string — no template variables
+  const jsonLines = ['['];
+  rubricData.forEach((rc, ci) => {
+    jsonLines.push('  {');
+    jsonLines.push('    "name": "' + rc.name.replace(/"/g,'\\"') + '",');
+    jsonLines.push('    "subcriteria": [');
+    rc.subcriteria.forEach((sc, si) => {
+      const comma = si < rc.subcriteria.length - 1 ? ',' : '';
+      jsonLines.push('      {"name":"' + sc.name.replace(/"/g,'\\"') + '","score":6,"reasoning":"evaluación","evidence":"texto","selfCritique":"ok"}' + comma);
+    });
+    jsonLines.push('    ],');
+    jsonLines.push('    "feedUp":"objetivo","feedBack":"logro","feedForward":"mejora"');
+    jsonLines.push('  }' + (ci < rubricData.length - 1 ? ',' : ''));
+  });
+  jsonLines.push(']');
 
-  return `Eres un evaluador académico experto. Evalúa este Trabajo de Fin de Grado.
-
-TEXTO DEL TFG (extracto):
-${tfgText.slice(0, 8000)}
-
-CRITERIOS DE EVALUACIÓN (escala ${scaleMin} a ${scaleMax}):
-${criteriaStr}
-
-INSTRUCCIONES:
-- Asigna una puntuación entre ${scaleMin} y ${scaleMax} a cada subcriterio basándote en el texto.
-- Sé riguroso: usa toda la escala. Un trabajo mediocre debe recibir notas intermedias, no extremos.
-- Incluye una cita textual del TFG como evidencia de cada puntuación.
-- Responde EXACTAMENTE con este formato JSON (sin texto antes ni después, sin markdown):
-
-${jsonStructure}
-
-Sustituye los valores de ejemplo por tu evaluación real. Responde en ${lang}.`;
+  return 'Evalúa este Trabajo de Fin de Grado en ' + lang + '.\n\n' +
+    'TEXTO (extracto):\n' + tfgText.slice(0, 6000) + '\n\n' +
+    'CRITERIOS (escala ' + scaleMin + ' a ' + scaleMax + '):\n' + criteriaLines + '\n\n' +
+    'INSTRUCCIONES:\n' +
+    '- Asigna una puntuación entre ' + scaleMin + ' y ' + scaleMax + ' a cada subcriterio.\n' +
+    '- Usa toda la escala. Un trabajo normal debe recibir notas entre ' + (scaleMin + (scaleMax-scaleMin)*0.4).toFixed(0) + ' y ' + (scaleMin + (scaleMax-scaleMin)*0.8).toFixed(0) + '.\n' +
+    '- Basa cada puntuación en el texto del TFG.\n\n' +
+    'Responde SOLO con este JSON (rellena los scores con tu evaluación real, entre ' + scaleMin + ' y ' + scaleMax + '):\n' +
+    '{"criteria":' + jsonLines.join('\n') + '}';
 }
 
 // ── Fallback síntesis cuando el JSON del agente S falla ──────────────────────
