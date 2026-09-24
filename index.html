@@ -1,6 +1,64 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script id="gpt6-luna-shim">
+/* gpt-6-luna: modelo por defecto con temperatura=1 (actualización sep-2026).
+   Adapta las peticiones a la API de OpenAI para la familia gpt-6:
+   temperature=1, max_tokens -> max_completion_tokens (con margen para razonamiento)
+   y reintento automático si la API rechaza algún parámetro. */
+(function(){
+  var NEW='gpt-6-luna', OLD='gpt-4o-mini';
+  try{
+    if(!localStorage.getItem('__gpt6_luna_mig_v1')){
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i), v=localStorage.getItem(k);
+        if(v===OLD||v==='"'+OLD+'"'){ localStorage.setItem(k, v.replace(OLD,NEW)); continue; }
+        if(v && v.length<20000 && v.charAt(0)==='{' && v.indexOf(OLD)>=0){
+          try{ var o=JSON.parse(v), ch=false;
+            for(var p in o){ if(o[p]===OLD){ o[p]=NEW; ch=true; } }
+            if(ch) localStorage.setItem(k, JSON.stringify(o));
+          }catch(e){}
+        }
+      }
+      localStorage.setItem('__gpt6_luna_mig_v1','1');
+    }
+  }catch(e){}
+  var of=window.fetch; if(!of) return;
+  function adapt(url,b){
+    if(!b || typeof b.model!=='string' || !/^gpt-6/.test(b.model)) return false;
+    b.temperature=1;
+    ['top_p','frequency_penalty','presence_penalty','logit_bias','logprobs','top_logprobs'].forEach(function(p){ delete b[p]; });
+    if(/chat\/completions/.test(url) && b.max_tokens!=null){
+      if(b.max_completion_tokens==null) b.max_completion_tokens=Math.min(128000, (+b.max_tokens||0)+6000);
+      delete b.max_tokens;
+    }
+    return true;
+  }
+  window.fetch=function(input,init){
+    var url=typeof input==='string'?input:(input&&input.url)||'';
+    if(!/api\.openai\.com\/v1\/(chat\/completions|responses)/.test(url) || !init || typeof init.body!=='string') return of.apply(this,arguments);
+    var b; try{ b=JSON.parse(init.body); }catch(e){ return of.apply(this,arguments); }
+    if(!adapt(url,b)) return of.apply(this,arguments);
+    var self=this, tries=0;
+    function go(){
+      var ini=Object.assign({},init,{body:JSON.stringify(b)});
+      return of.call(self,input,ini).then(function(r){
+        if(r.status!==400 || tries>=3) return r;
+        return r.clone().json().then(function(j){
+          var err=(j&&j.error)||{}, p=err.param, msg=String(err.message||'');
+          if(!p){ var m=msg.match(/'([a-z_]+)'/); if(m) p=m[1]; }
+          if(p && b.hasOwnProperty(p) && /unsupported|not supported|does not support|only the default/i.test(msg)){
+            delete b[p]; tries++; return go();
+          }
+          return r;
+        },function(){ return r; });
+      });
+    }
+    return go();
+  };
+})();
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TFG Evaluator · UMH</title>
@@ -563,7 +621,7 @@
     <div class="form-group mb8">
       <label>Modelo</label>
       <select id="model-select" style="max-width:300px;" onchange="updateCostEstimate()">
-        <option value="gpt-4o-mini" selected>gpt-4o-mini — rápido y económico</option>
+        <option value="gpt-6-luna" selected>gpt-6-luna · más capaz y más barato (recomendado)</option><option value="gpt-4o-mini">gpt-4o-mini — rápido y económico</option>
         <option value="gpt-4o">gpt-4o — mayor precisión</option>
         <option value="gpt-4-turbo">gpt-4-turbo</option>
       </select>
@@ -955,7 +1013,7 @@
         <select id="ev-judge-model" style="max-width:260px;" onchange="onEvalCfgChange()">
           <option value="gpt-4o">gpt-4o</option>
           <option value="gpt-4-turbo">gpt-4-turbo</option>
-          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="gpt-6-luna">gpt-6-luna · más capaz y más barato (recomendado)</option><option value="gpt-4o-mini">gpt-4o-mini</option>
         </select>
       </div>
     </div>
@@ -1028,7 +1086,7 @@
     <div class="chat-modal-header">
       <div style="font-size:18px;">💬</div>
       <div class="chat-modal-title" id="chat-modal-title">Chat con el informe</div>
-      <span class="chat-hint" id="chat-model-badge">gpt-4o-mini</span>
+      <span class="chat-hint" id="chat-model-badge">gpt-6-luna</span>
       <button class="btn sm" onclick="closeChatModal()">✕ Cerrar</button>
     </div>
     <div class="chat-suggestions" id="chat-suggestions"></div>
@@ -1293,7 +1351,7 @@ function resetAllPrompts() {
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 const state = {
-  apiKey:'', model:'gpt-4o-mini', temperature:0.3, maxTokens:2000, maxChars:12000, feedbackLang:'español',
+  apiKey:'', model:'gpt-6-luna', temperature:0.3, maxTokens:2000, maxChars:12000, feedbackLang:'español',
   tfgFiles:[], rubricText:'', rubricData:[], scaleMin:0, scaleMax:10,
   results:[], evaluating:false, sortOrder:'default',
   normalizationParams:{ applied:false },
@@ -1346,13 +1404,13 @@ function toggleApiKeyVisibility() {
 
 // ── COST ESTIMATE ─────────────────────────────────────────────────────────────
 const MODEL_PRICES = {
-  'gpt-4o-mini':  { in: 0.15/1e6,  out: 0.6/1e6  },
+  'gpt-6-luna':  { in: 0.1/1e6,  out: 0.5/1e6  }, 'gpt-4o-mini':  { in: 0.15/1e6,  out: 0.6/1e6  },
   'gpt-4o':       { in: 2.5/1e6,   out: 10/1e6   },
   'gpt-4-turbo':  { in: 10/1e6,    out: 30/1e6   },
 };
 
 function updateCostEstimate() {
-  const model = document.getElementById('model-select')?.value || 'gpt-4o-mini';
+  const model = document.getElementById('model-select')?.value || 'gpt-6-luna';
   const maxChars = parseInt(document.getElementById('max-chars')?.value) || 12000;
   const maxTok = parseInt(document.getElementById('max-tokens')?.value) || 2000;
   const chunkSize = parseInt(document.getElementById('chunk-size')?.value) || 20000;
@@ -1417,7 +1475,7 @@ function buildPreflight() {
   // Cost summary
   const nTfgs = readyFiles.length;
   if (nTfgs > 0) {
-    const model = state.model || 'gpt-4o-mini';
+    const model = state.model || 'gpt-6-luna';
     const price = MODEL_PRICES[model] || MODEL_PRICES['gpt-4o-mini'];
     const chunkSize = parseInt(document.getElementById('chunk-size').value) || 20000;
     const overlap = parseInt(document.getElementById('chunk-overlap').value) || 1000;
@@ -1753,7 +1811,7 @@ async function callOpenAI(messages,maxTokens,temperature,retries=2) {
     const response=await fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+state.apiKey},
-      body:JSON.stringify({model:state.model||'gpt-4o-mini',messages,max_tokens:maxTokens||state.maxTokens,temperature:temperature??state.temperature})
+      body:JSON.stringify({model:state.model||'gpt-6-luna',messages,max_tokens:maxTokens||state.maxTokens,temperature:temperature??state.temperature})
     });
     if(response.status===429||response.status===503){
       if(attempt<retries){const wait=Math.pow(2,attempt+1)*1000;await sleep(wait);continue;}
@@ -1861,7 +1919,7 @@ function checkForRecoverableSession() {
     <div class="session-banner-icon">⚡</div>
     <div class="session-banner-body">
       <div class="session-banner-title">Sesión parcial recuperada</div>
-      <div class="session-banner-meta">${session.date.slice(0,10)} · ${n} de ${total} TFGs completados · media ${avg.toFixed(2)} · ${session.model||'gpt-4o-mini'}</div>
+      <div class="session-banner-meta">${session.date.slice(0,10)} · ${n} de ${total} TFGs completados · media ${avg.toFixed(2)} · ${session.model||'gpt-6-luna'}</div>
       <div class="session-progress-dots mt8">${dots}</div>
     </div>
     <div style="display:flex;gap:8px;flex-shrink:0;">
@@ -2039,7 +2097,7 @@ function updateExtractorCostNote() {
   const overlap = parseInt(document.getElementById('chunk-overlap')?.value) || 1000;
   const effectiveChunk = chunkSize - overlap;
   const nChunks = Math.ceil(exampleTfgChars / effectiveChunk);
-  const model = document.getElementById('model-select')?.value || 'gpt-4o-mini';
+  const model = document.getElementById('model-select')?.value || 'gpt-6-luna';
   const price = MODEL_PRICES[model] || MODEL_PRICES['gpt-4o-mini'];
   const tokPerChunk = Math.round(chunkSize / 4) + 500;
   const outPerChunk = 600;
@@ -4400,7 +4458,7 @@ function openChatModal(ri) {
   chatState.history = [];
   chatState.thinking = false;
   document.getElementById('chat-modal-title').textContent = `Chat · ${result.tfgName.replace(/\.pdf$/i,'').slice(0,50)}`;
-  document.getElementById('chat-model-badge').textContent = state.model || 'gpt-4o-mini';
+  document.getElementById('chat-model-badge').textContent = state.model || 'gpt-6-luna';
   document.getElementById('chat-messages').innerHTML = '';
   document.getElementById('chat-input').value = '';
   // Suggestions
