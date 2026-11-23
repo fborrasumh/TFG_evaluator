@@ -1822,6 +1822,7 @@ INSTRUCCIONES:
 3. Genera feedback formativo completo y constructivo orientado al desarrollo del estudiante.
 4. La síntesis debe ser más reflexiva y detallada que las evaluaciones individuales.
 5. Incluye en cada subcriterio el campo "agentScores" con las puntuaciones de los 3 agentes.
+6. En "evidence" copia LITERALMENTE la cita del TFG que aportó uno de los agentes (la que mejor respalde tu nota). No la parafrasees ni la resumas: se comprueba palabra por palabra contra el texto del TFG.
 
 Responde SOLO con JSON válido (misma estructura que los agentes), añadiendo el campo agentScores:
 {{
@@ -3420,6 +3421,8 @@ async function evaluateTfg(tfg) {
   // ── M8: verificación de evidencias contra el texto original ──────────────
   addLog('  [✓] Verificando evidencias textuales...','info');
   verifyEvidences(synth, tfg.text);
+  const adopted = adoptAgentEvidence(synth, [a1,a2,a3], tfg.text);
+  if(adopted) addLog(`  [✓] ${adopted} evidencia(s) parafraseadas por la síntesis sustituidas por la cita literal de un agente`,'info');
 
   // ── M9: plan de mejora prioritario ───────────────────────────────────────
   const improvementPlan = buildImprovementPlan(synth, state.rubricData, scaleMin, scaleMax);
@@ -4097,6 +4100,29 @@ function buildCalibrationExamples(rubricData,scaleMin,scaleMax){
 }
 
 // ── M8: Verificación de evidencias ───────────────────────────────────────────
+// Si la síntesis parafrasea la evidencia, se recupera la cita literal que dio
+// algún evaluador para ese subcriterio (la primera que se localice en el TFG).
+function adoptAgentEvidence(synth, agents, originalText){
+  let n=0;
+  const same=(a,b)=>String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();
+  (synth.criteria||[]).forEach(c=>{
+    (c.subcriteria||[]).forEach(sc=>{
+      if(sc.evidenceVerified==='exact'||sc.evidenceVerified==='fuzzy') return;
+      for(const ag of agents){
+        if(!ag || ag.__blocked) continue;
+        const ac=(ag.criteria||[]).find(x=>same(x.name,c.name));
+        const asc=ac && (ac.subcriteria||[]).find(x=>same(x.name,sc.name));
+        if(!asc || !asc.evidence) continue;
+        const st=cascadeEvidenceStatus(asc.evidence, originalText);
+        if(st==='exact'||st==='fuzzy'){
+          sc.synthEvidence=sc.evidence; sc.evidence=asc.evidence; sc.evidenceVerified=st; sc.evidenceFromAgent=true; n++;
+          break;
+        }
+      }
+    });
+  });
+  return n;
+}
 // Resumen compacto de una evaluación para el agente de síntesis. Antes se
 // cortaba el JSON bruto a 2000 caracteres: con 15–20 subcriterios la síntesis
 // solo veía los dos o tres primeros y dejaba el resto «no disponible» (nota ~1).
