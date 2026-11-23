@@ -4088,12 +4088,26 @@ function buildCalibrationExamples(rubricData,scaleMin,scaleMax){
 }
 
 // ── M8: Verificación de evidencias ───────────────────────────────────────────
+// Normaliza para comparar citas: pdf.js une los fragmentos con espacios
+// (dobles espacios, saltos de línea, guiones de corte), y el modelo cambia
+// comillas, guiones y espacios. Sin esto, una cita literal no se encuentra.
+function normEvidenceText(t){
+  return String(t||'').normalize('NFKC').toLowerCase()
+    .replace(/\u00ad/g,'')                       // guion blando
+    .replace(/(\p{L})-\s*\n\s*(\p{L})/gu,'$1$2')  // palabra cortada al final de línea
+    .replace(/[\u2018\u2019\u201a\u201b\u2032]/g,"'")
+    .replace(/[\u201c\u201d\u201e\u201f\u00ab\u00bb\u2033]/g,'"')
+    .replace(/[\u2010-\u2015\u2212]/g,'-')
+    .replace(/\s+/g,' ')
+    .replace(/\s+([.,;:)\]])/g,'$1').replace(/([(\[])\s+/g,'$1')
+    .trim();
+}
 function verifyEvidences(synth,originalText){
-  const tl=originalText.toLowerCase();
+  const tl=normEvidenceText(originalText);
   (synth.criteria||[]).forEach(c=>{
     (c.subcriteria||[]).forEach(sc=>{
       if(!sc.evidence||sc.evidence.length<15){sc.evidenceVerified='empty';return;}
-      const evl=sc.evidence.toLowerCase().trim();
+      const evl=normEvidenceText(sc.evidence).replace(/^["'.…\s]+|["'.…\s]+$/g,'');
       if(tl.includes(evl)){sc.evidenceVerified='exact';return;}
       const words=evl.split(/\s+/).filter(w=>w.length>3);
       if(words.length<3){sc.evidenceVerified='short';return;}
