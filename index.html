@@ -4134,16 +4134,25 @@ function normEvidenceText(t){
 }
 function verifyEvidences(synth,originalText){
   const tl=normEvidenceText(originalText);
+  // Palabras de más de 3 letras, en orden: las ventanas se comparan sobre esta
+  // secuencia (antes se buscaban en el texto con las palabras cortas eliminadas,
+  // y casi nunca coincidían).
+  const toks=t=>t.split(/[^\p{L}\p{N}%]+/u).filter(w=>w.length>3);
+  const tlTok=' '+toks(tl).join(' ')+' ';
+  const stripQ=t=>t.replace(/^[\s"'«»“”.,;:…]+|[\s"'«»“”.,;:…]+$/g,'');
   (synth.criteria||[]).forEach(c=>{
     (c.subcriteria||[]).forEach(sc=>{
       if(!sc.evidence||sc.evidence.length<15){sc.evidenceVerified='empty';return;}
-      const evl=normEvidenceText(sc.evidence).replace(/^["'.…\s]+|["'.…\s]+$/g,'');
+      const evl=stripQ(normEvidenceText(sc.evidence));
       if(tl.includes(evl)){sc.evidenceVerified='exact';return;}
-      const words=evl.split(/\s+/).filter(w=>w.length>3);
+      // Cita con elisiones «[...]» o «…»: cada tramo debe estar literalmente en el texto
+      const parts=evl.split(/\[\s*(?:\.\.\.|…)\s*\]|\(\s*(?:\.\.\.|…)\s*\)|…|\.\.\./).map(stripQ).filter(x=>x.length>=12);
+      if(parts.length>1 && parts.every(x=>tl.includes(x))){sc.evidenceVerified='exact';return;}
+      const words=toks(evl);
       if(words.length<3){sc.evidenceVerified='short';return;}
       const windows=[];
-      for(let i=0;i<words.length-2;i++)windows.push(words.slice(i,i+3).join(' '));
-      const hits=windows.filter(w=>tl.includes(w)).length;
+      for(let i=0;i<words.length-2;i++)windows.push(' '+words.slice(i,i+3).join(' ')+' ');
+      const hits=windows.filter(w=>tlTok.includes(w)).length;
       sc.evidenceVerified=hits/windows.length>=0.5?'fuzzy':'unverified';
     });
   });
