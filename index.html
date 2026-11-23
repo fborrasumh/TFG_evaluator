@@ -3388,7 +3388,7 @@ async function evaluateTfg(tfg) {
   const synthTpl = getPrompt('user_synth');
   let usrS=interpolate(synthTpl,{
     ...baseVarsTyped,
-    eval1:rawForSynth[0].slice(0,2000), eval2:rawForSynth[1].slice(0,2000), eval3:rawForSynth[2].slice(0,2000),
+    eval1:compactEvalForSynth(rawForSynth[0],a1), eval2:compactEvalForSynth(rawForSynth[1],a2), eval3:compactEvalForSynth(rawForSynth[2],a3),
     arbitrationNote
   });
   // La plantilla por defecto no incluye {arbitrationNote}: sin esto el arbitraje nunca llegaba a la síntesis
@@ -3921,6 +3921,15 @@ function saveMemoryBank(bank) {
 function saveResultToMemoryBank(result, tfgText) {
   const nAnchors = parseInt(document.getElementById('memory-anchors')?.value)||3;
   if(nAnchors === 0) return; // feature disabled
+  // Una evaluación no fiable (verificador descalibrado o mayoría de subcriterios
+  // en cuarentena) no debe servir de anchor: contaminaría las siguientes.
+  const er = result.evalReport || {};
+  const nSub = (result.synthesis?.criteria||[]).reduce((n,c)=>n+(c.subcriteria||[]).length,0);
+  const nQuar = (er.quarantined||[]).length;
+  if((er.verifierSelfTest && !er.verifierSelfTest.pass && !er.verifierSelfTest.skipped) || (nSub && nQuar/nSub > 0.5)){
+    addLog('  [🧠] No se guarda en memoria histórica: evaluación no fiable (verificador o cuarentena)', 'warn');
+    return;
+  }
   const bank = loadMemoryBank();
   const tokens = tokenize(tfgText.slice(0, 30000));
   const vec = buildTfIdf(tokens);
@@ -4088,6 +4097,27 @@ function buildCalibrationExamples(rubricData,scaleMin,scaleMax){
 }
 
 // ── M8: Verificación de evidencias ───────────────────────────────────────────
+// Resumen compacto de una evaluación para el agente de síntesis. Antes se
+// cortaba el JSON bruto a 2000 caracteres: con 15–20 subcriterios la síntesis
+// solo veía los dos o tres primeros y dejaba el resto «no disponible» (nota ~1).
+function compactEvalForSynth(raw, parsed){
+  if(!parsed || parsed.__blocked || !Array.isArray(parsed.criteria) || !parsed.criteria.length){
+    return String(raw||'{"criteria":[]}').slice(0, 12000);
+  }
+  const cut=(t,n)=>{ t=String(t||''); return t.length>n ? t.slice(0,n)+'…' : t; };
+  const out={ criteria: parsed.criteria.map(c=>({
+    name:c.name,
+    subcriteria:(c.subcriteria||[]).map(sc=>({
+      name:sc.name, score:sc.score,
+      evidence:cut(sc.evidence,320),
+      reasoning:cut(sc.reasoning,320),
+      ...(sc.selfCritique?{selfCritique:cut(sc.selfCritique,160)}:{})
+    })),
+    ...(c.feedBack?{feedBack:cut(c.feedBack,240)}:{}),
+    ...(c.feedForward?{feedForward:cut(c.feedForward,240)}:{})
+  }))};
+  return JSON.stringify(out);
+}
 // Normaliza para comparar citas: pdf.js une los fragmentos con espacios
 // (dobles espacios, saltos de línea, guiones de corte), y el modelo cambia
 // comillas, guiones y espacios. Sin esto, una cita literal no se encuentra.
